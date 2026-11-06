@@ -1,0 +1,224 @@
+modules:
+  # ── Jira: where people see and complete the review ────────────────────────
+  jira:issuePanel:
+    - key: preflight-panel
+      resource: panel
+      resolver:
+        function: panel-resolver
+      render: native
+      title: Preflight
+      icon: https://developer.atlassian.com/platform/forge/images/icons/issue-panel-icon.svg
+
+  jira:adminPage:
+    - key: preflight-admin
+      resource: admin
+      resolver:
+        function: admin-resolver
+      render: native
+      title: Preflight
+
+  # ── Jira: the gate ────────────────────────────────────────────────────────
+  jira:workflowValidator:
+    - key: preflight-gate
+      name: Preflight privacy evidence gate
+      description: Blocks the transition while any active Preflight privacy rule that applies to the work item is missing evidence or approval.
+      function: validate
+      projectTypes:
+        - company-managed
+        - team-managed
+
+  # Makes  preflightStatus = blocked  and  preflightOpen > 0  work in JQL.
+  jira:entityProperty:
+    - key: preflight-index
+      entityType: issue
+      propertyKey: preflight
+      values:
+        - path: status
+          type: string
+          searchAlias: preflightStatus
+        - path: open
+          type: number
+          searchAlias: preflightOpen
+
+  trigger:
+    - key: preflight-issue-events
+      function: on-issue-changed
+      events:
+        - avi:jira:created:issue
+        - avi:jira:updated:issue
+    - key: preflight-installed
+      function: on-installed
+      events:
+        - avi:forge:installed:app
+
+  # ── Rovo: an assignable agent that explains gaps and gathers evidence ─────
+  rovo:agent:
+    - key: preflight-agent
+      name: Preflight
+      description: Checks a Jira work item against your organisation's privacy review rules, explains what evidence is missing and helps the team supply it.
+      prompt: |
+        You are Preflight, a privacy review assistant inside Jira. You help teams complete their
+        organisation's own privacy review steps before work ships. The rules come from the
+        organisation's Information Officer and cite sections of South Africa's Protection of Personal
+        Information Act (POPIA) or internal policy.
+
+        Hard rules:
+        - Never say work is "compliant", "legal" or "POPIA compliant". Say which internal review steps
+          are complete or open. You are not a lawyer and you do not give legal advice.
+        - You cannot approve, dismiss rules or grant exceptions. Only a human approver can, in the
+          Preflight panel. If asked, explain this and offer to request approval instead.
+        - Only cite clauses, rule titles and requirement names returned by your actions. Never invent
+          section numbers.
+        - Before saving an answer, show the user the exact text you will save and ask them to confirm.
+
+        Jobs:
+        a. Check a work item. If the issue key is not in context, ask for it. Call
+           preflight-check-issue. Lead with the status, then list each open requirement with its rule
+           and clause, and say what a good answer would contain. Mention why each rule matched.
+        b. Help answer a requirement. Draft a clear, specific answer from what the user tells you
+           (purpose, data minimisation, retention period, opt-out mechanism, destination country, etc.).
+           For "choice" requirements, the answer must be exactly one of the listed options. After the
+           user confirms, call preflight-save-answer with the ruleId and requirementId from the check.
+        c. Request approval. When answers are complete and only approval is left, offer to call
+           preflight-request-approval, which comments on the work item and mentions the approvers.
+        d. Flag a missed rule. If the user describes personal data the check did not catch, call
+           preflight-list-rules, pick the closest rule, confirm with the user, then call
+           preflight-flag-rule.
+        e. Explain the rules. Call preflight-list-rules and summarise them in plain language.
+      conversationStarters:
+        - Preflight this work item
+        - What evidence is missing before this can close?
+        - Help me answer the retention question
+        - Which privacy rules are active?
+      actions:
+        - preflight-check-issue
+        - preflight-list-rules
+        - preflight-save-answer
+        - preflight-request-approval
+        - preflight-flag-rule
+
+  action:
+    - key: preflight-check-issue
+      name: Check a work item with Preflight
+      function: action-check-issue
+      actionVerb: GET
+      description: Returns the Preflight status of a Jira work item, the privacy rules that apply, why they matched, and which requirements are still open.
+      inputs:
+        issueKey:
+          title: Issue key
+          type: string
+          required: false
+          description: The Jira work item key, for example PRIV-12. Leave empty to use the work item in context.
+    - key: preflight-list-rules
+      name: List Preflight rules
+      function: action-list-rules
+      actionVerb: GET
+      description: Lists the organisation's Preflight privacy rules with their clauses, status and requirements.
+    - key: preflight-save-answer
+      name: Save a Preflight answer
+      function: action-save-answer
+      actionVerb: UPDATE
+      description: Saves the user's confirmed answer to one Preflight requirement on a work item. Cannot approve.
+      inputs:
+        issueKey:
+          title: Issue key
+          type: string
+          required: false
+          description: The Jira work item key. Leave empty to use the work item in context.
+        ruleId:
+          title: Rule id
+          type: string
+          required: true
+          description: The ruleId returned by preflight-check-issue.
+        requirementId:
+          title: Requirement id
+          type: string
+          required: true
+          description: The requirementId returned by preflight-check-issue. Must not be an approval requirement.
+        answer:
+          title: Answer
+          type: string
+          required: true
+          description: The exact answer text the user confirmed. For choice requirements, exactly one listed option.
+    - key: preflight-request-approval
+      name: Request Preflight approval
+      function: action-request-approval
+      actionVerb: CREATE
+      description: Adds a comment to the work item that mentions the Preflight approvers and lists what is waiting on them.
+      inputs:
+        issueKey:
+          title: Issue key
+          type: string
+          required: false
+          description: The Jira work item key. Leave empty to use the work item in context.
+        message:
+          title: Message
+          type: string
+          required: false
+          description: Optional short note to the approvers.
+    - key: preflight-flag-rule
+      name: Flag a Preflight rule
+      function: action-flag-rule
+      actionVerb: UPDATE
+      description: Marks an active Preflight rule as applying to a work item when keyword matching missed it.
+      inputs:
+        issueKey:
+          title: Issue key
+          type: string
+          required: false
+          description: The Jira work item key. Leave empty to use the work item in context.
+        ruleId:
+          title: Rule id
+          type: string
+          required: true
+          description: The ruleId from preflight-list-rules.
+
+  # ── MCP: the same checks for coding agents (Claude, Cursor, Rovo Dev) ─────
+  rovo:mcp:
+    - key: preflight-mcp
+      name: Preflight
+      tools:
+        - preflight-check-issue
+        - preflight-list-rules
+        - preflight-request-approval
+
+  function:
+    - key: panel-resolver
+      handler: index.panelHandler
+    - key: admin-resolver
+      handler: index.adminHandler
+    - key: validate
+      handler: index.validateTransition
+    - key: on-issue-changed
+      handler: index.onIssueChanged
+    - key: on-installed
+      handler: index.onInstalled
+    - key: action-check-issue
+      handler: index.actionCheckIssue
+    - key: action-list-rules
+      handler: index.actionListRules
+    - key: action-save-answer
+      handler: index.actionSaveAnswer
+    - key: action-request-approval
+      handler: index.actionRequestApproval
+    - key: action-flag-rule
+      handler: index.actionFlagRule
+
+resources:
+  - key: panel
+    path: src/frontend/panel.jsx
+  - key: admin
+    path: src/frontend/admin.jsx
+
+permissions:
+  scopes:
+    - read:jira-work
+    - write:jira-work
+    - read:jira-user
+    - storage:app
+
+app:
+  runtime:
+    name: nodejs24.x
+    memoryMB: 256
+    architecture: arm64

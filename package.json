@@ -1,0 +1,26 @@
+{
+  "name": "preflight",
+  "version": "0.1.0",
+  "description": "Preflight: turn privacy policy into enforceable delivery guardrails in Jira (Atlassian Forge app).",
+  "main": "index.js",
+  "license": "MIT",
+  "private": true,
+  "scripts": {
+    "test": "node --test --experimental-test-module-mocks \"test/**/*.test.js\"",
+    "lint": "eslint src/**/*",
+    "forge:lint": "forge lint"
+  },
+  "dependencies": {
+    "@forge/api": "^8.4.0",
+    "@forge/bridge": "^7.2.1",
+    "@forge/kvs": "^2.1.1",
+    "@forge/react": "^12.4.0",
+    "@forge/resolver": "^2.0.2",
+    "react": "^18.2.0"
+  },
+  "devDependencies": {
+    "@forge/cli": "^15.0.0",
+    "eslint": "^8.56.0",
+    "eslint-plugin-react-hooks": "^4.6.0"
+  }
+}
