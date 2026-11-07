@@ -7,16 +7,40 @@
  * human approver, checked here on the server.
  */
 import { evaluate, answersFingerprint } from './engine/evaluate.js';
-import { getRules, getSettings, getRecord, updateRecord } from './store.js';
+import { getRules, saveRules, getSettings, getRecord, updateRecord } from './store.js';
 import { getWorkItem, currentUserIsJiraAdmin, setPreflightProperty, getPreflightProperty, addComment } from './jira.js';
 
-export class PreflightError extends Error {}
+import { PreflightError } from './errors.js';
+import { cleanRule } from './rules.js';
+
+export { PreflightError };
+
+const APPROVAL_REQUEST_COOLDOWN_MS = 10 * 60 * 1000;
 
 /** Load the work item, rules and evidence, and run the engine. */
 export async function assess(issueIdOrKey, { asUser = true } = {}) {
   const workItem = await getWorkItem(issueIdOrKey, { asUser });
   const [rules, record] = await Promise.all([getRules(), getRecord(workItem.id)]);
-  const result = evaluate(workItem, rules, record);
+  let result = evaluate(workItem, rules, record);
+
+  // Remember every rule that has matched by phrase or label, so it stays
+  // applicable if the ticket text is reworded later (see engine "sticky").
+  const newlyMatched = result.applicable.filter(
+    (m) => !record.matched?.[m.ruleId] && (m.why.keywords.length || m.why.labels.length),
+  );
+  if (newlyMatched.length) {
+    const saved = await updateRecord(
+      workItem.id,
+      'app',
+      `Matched ${newlyMatched.map((m) => `"${m.title}" (${[...m.why.keywords, ...m.why.labels].join(', ')})`).join('; ')}`,
+      (rec) => {
+        rec.matched = rec.matched || {};
+        for (const m of newlyMatched) rec.matched[m.ruleId] = { at: Date.now(), phrases: [...m.why.keywords, ...m.why.labels] };
+      },
+    );
+    result = evaluate(workItem, rules, saved);
+    return { workItem, rules, record: saved, result };
+  }
   return { workItem, rules, record, result };
 }
 
@@ -34,10 +58,20 @@ export async function syncProperty(workItem, result) {
   return changed;
 }
 
-/** Approvers: anyone listed in settings, plus Jira administrators. Only valid for the signed-in user. */
+/**
+ * Who may approve. Once approvers are configured, ONLY they can approve: a Jira
+ * admin is not automatically the Information Officer. With no approvers
+ * configured, Preflight runs in "small-team mode" and Jira admins approve.
+ * Only valid for the signed-in user.
+ */
+export async function approverMode() {
+  const settings = await getSettings();
+  return settings.approverAccountIds.length ? 'named-approvers' : 'small-team';
+}
+
 export async function canCurrentUserApprove(accountId) {
   const settings = await getSettings();
-  if (settings.approverAccountIds.includes(accountId)) return true;
+  if (settings.approverAccountIds.length) return settings.approverAccountIds.includes(accountId);
   return currentUserIsJiraAdmin();
 }
 
@@ -132,12 +166,15 @@ export async function restoreRule(issueIdOrKey, ruleId, actor) {
   return refresh(workItem.id);
 }
 
-export async function setException(issueIdOrKey, actor, reason) {
+/** An exception: the rule applies, but an approver accepts a deviation for a limited time. */
+export async function setException(issueIdOrKey, actor, reason, days = 30) {
   if (!String(reason || '').trim()) throw new PreflightError('Give a reason for the exception.');
+  const validDays = Math.min(365, Math.max(1, Math.round(Number(days) || 30)));
   const { workItem } = await assess(issueIdOrKey);
   await requireApprover(actor, workItem);
-  await updateRecord(workItem.id, actor, `Exception granted: ${reason}`, (rec) => {
-    rec.exception = { by: actor, at: Date.now(), reason: String(reason).slice(0, 500) };
+  const expiresAt = Date.now() + validDays * 24 * 60 * 60 * 1000;
+  await updateRecord(workItem.id, actor, `Exception granted for ${validDays} day(s): ${reason}`, (rec) => {
+    rec.exception = { by: actor, at: Date.now(), reason: String(reason).slice(0, 500), expiresAt };
   });
   return refresh(workItem.id);
 }
@@ -152,9 +189,13 @@ export async function clearException(issueIdOrKey, actor) {
 }
 
 /** Post a comment that @mentions the configured approvers and lists what is waiting on them. */
-export async function requestApproval(issueIdOrKey, actor, message = '') {
-  const { workItem, result } = await assess(issueIdOrKey);
+export async function requestApproval(issueIdOrKey, actor, message = '', via = 'panel') {
+  const { workItem, result, record } = await assess(issueIdOrKey);
   if (result.status !== 'blocked') return { posted: false, reason: `Nothing to approve: ${result.summary}` };
+  const since = Date.now() - (record.lastApprovalRequestAt || 0);
+  if (since < APPROVAL_REQUEST_COOLDOWN_MS) {
+    return { posted: false, reason: `Approval was already requested ${Math.round(since / 60000)} minute(s) ago. Try again later.` };
+  }
   const settings = await getSettings();
   const mentions = settings.approverAccountIds.slice(0, 5).flatMap((id) => [
     { type: 'mention', attrs: { id } },
@@ -177,8 +218,32 @@ export async function requestApproval(issueIdOrKey, actor, message = '') {
     ],
   };
   await addComment(workItem.key, body);
-  await updateRecord(workItem.id, actor, 'Requested approval', () => {});
+  await updateRecord(workItem.id, actor, `Requested approval (${via})`, (rec) => {
+    rec.lastApprovalRequestAt = Date.now();
+  });
   return { posted: true, notified: settings.approverAccountIds.length, open: result.openCount };
+}
+
+/**
+ * Save a DRAFT rule proposed by the Rovo agent from a policy page. Only Jira
+ * admins may do this, drafts are never enforced, and a human must activate it
+ * on the admin page.
+ */
+export async function draftRuleFromPolicy(input, actor) {
+  if (!(await currentUserIsJiraAdmin())) throw new PreflightError('Only Jira administrators can add Preflight rules.');
+  const rules = await getRules();
+  let id = String(input.ruleId || input.title || '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '')
+    .slice(0, 50);
+  if (id.length < 3) id = `rule-${Date.now().toString(36)}`;
+  while (rules.some((r) => r.id === id)) id = `${id.slice(0, 45)}-${Math.random().toString(36).slice(2, 5)}`;
+  const rule = cleanRule({ ...input, id }, null);
+  rule.status = 'draft';
+  rule.source = { kind: 'rovo-draft', url: input.sourceUrl || null, by: actor, at: Date.now() };
+  await saveRules([...rules, rule]);
+  return rule;
 }
 
 /** Re-evaluate after a change and update the searchable mirror. */

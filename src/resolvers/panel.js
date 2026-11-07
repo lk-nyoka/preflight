@@ -7,9 +7,9 @@
 import Resolver from '@forge/resolver';
 import {
   assess, saveAnswers, approve, revokeApproval, flagRule, dismissRule, restoreRule,
-  setException, clearException, requestApproval, canCurrentUserApprove, syncProperty, PreflightError,
+  setException, clearException, requestApproval, canCurrentUserApprove, approverMode, syncProperty, PreflightError,
 } from '../service.js';
-import { getSettings } from '../store.js';
+import { getSettings, getGates } from '../store.js';
 
 const resolver = new Resolver();
 
@@ -22,8 +22,12 @@ function issueFrom(req) {
 async function view(state, accountId) {
   const settings = await getSettings();
   const canApprove = await canCurrentUserApprove(accountId).catch(() => false);
+  const gates = await getGates().catch(() => ({}));
   return {
     ok: true,
+    approverMode: await approverMode(),
+    failClosed: settings.failClosed,
+    gate: gates[state.workItem.projectKey] || null,
     issue: { id: state.workItem.id, key: state.workItem.key, summary: state.workItem.summary },
     result: state.result,
     canApprove,
@@ -81,7 +85,7 @@ define('restoreRule', async (req) =>
 );
 
 define('setException', async (req) =>
-  view(await setException(issueFrom(req), req.context.accountId, req.payload.reason), req.context.accountId),
+  view(await setException(issueFrom(req), req.context.accountId, req.payload.reason, req.payload.days), req.context.accountId),
 );
 
 define('clearException', async (req) =>

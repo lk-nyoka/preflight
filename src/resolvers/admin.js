@@ -6,13 +6,13 @@
  */
 import Resolver from '@forge/resolver';
 import { evaluate } from '../engine/evaluate.js';
-import { getRules, saveRules, getSettings, saveSettings } from '../store.js';
+import { getRules, saveRules, getSettings, saveSettings, getGates } from '../store.js';
 import { currentUserIsJiraAdmin, getCreatableIssueTypes, createIssue } from '../jira.js';
 import { POPIA_RULES, POPIA_PACK_ID, DEMO_ISSUES } from '../rulepacks/popia.js';
 import { PreflightError } from '../service.js';
+import { cleanRule } from '../rules.js';
 
 const resolver = new Resolver();
-const TYPES = ['answer', 'choice', 'link', 'approval'];
 
 function define(name, fn) {
   resolver.define(name, async (req) => {
@@ -27,56 +27,7 @@ function define(name, fn) {
 }
 
 async function adminState(extra = {}) {
-  return { ok: true, rules: await getRules(), settings: await getSettings(), ...extra };
-}
-
-/** Validate a rule coming from the editor so a typo cannot break enforcement. */
-function cleanRule(input, existing) {
-  const id = String(input.id || existing?.id || '').trim();
-  if (!/^[a-z0-9-]{3,60}$/.test(id)) throw new PreflightError('Rule id must be 3-60 lowercase letters, digits or dashes.');
-  const title = String(input.title || '').trim();
-  if (!title) throw new PreflightError('Rule needs a title.');
-  const split = (v) =>
-    (Array.isArray(v) ? v : String(v || '').split(/[\n,]/)).map((s) => String(s).trim()).filter(Boolean);
-  const keywords = split(input.keywords ?? input.triggers?.keywords);
-  const labels = split(input.labels ?? input.triggers?.labels);
-  if (!keywords.length && !labels.length) throw new PreflightError('Add at least one trigger keyword or label.');
-
-  let requirements = input.requirements;
-  if (typeof requirements === 'string') {
-    try {
-      requirements = JSON.parse(requirements);
-    } catch {
-      throw new PreflightError('Requirements must be valid JSON.');
-    }
-  }
-  if (!Array.isArray(requirements) || !requirements.length) throw new PreflightError('Add at least one requirement.');
-  const seen = new Set();
-  requirements = requirements.map((r) => {
-    if (!r?.id || !r?.label || !TYPES.includes(r.type)) {
-      throw new PreflightError(`Each requirement needs id, label and type (${TYPES.join(', ')}).`);
-    }
-    if (seen.has(r.id)) throw new PreflightError(`Duplicate requirement id "${r.id}".`);
-    seen.add(r.id);
-    if (r.type === 'choice' && (!Array.isArray(r.options) || r.options.length < 2)) {
-      throw new PreflightError(`"${r.label}" is a choice, so it needs at least two options.`);
-    }
-    return { id: r.id, label: r.label, type: r.type, help: r.help, clause: r.clause, options: r.options, minLength: r.minLength };
-  });
-
-  return {
-    ...(existing || {}),
-    id,
-    title,
-    clause: String(input.clause || '').trim() || 'Internal policy',
-    policyRef: String(input.policyRef || '').trim() || null,
-    summary: String(input.summary || '').trim(),
-    severity: input.severity === 'medium' ? 'medium' : 'high',
-    triggers: { keywords, labels },
-    requirements,
-    status: existing?.status || 'draft',
-    updatedAt: Date.now(),
-  };
+  return { ok: true, rules: await getRules(), settings: await getSettings(), gates: await getGates(), ...extra };
 }
 
 define('getState', async () => adminState());

@@ -20,8 +20,8 @@ modules:
   # ── Jira: the gate ────────────────────────────────────────────────────────
   jira:workflowValidator:
     - key: preflight-gate
-      name: Preflight privacy evidence gate
-      description: Blocks the transition while any active Preflight privacy rule that applies to the work item is missing evidence or approval.
+      name: Preflight privacy review gate
+      description: Prevents the transition while an active Preflight privacy review rule that applies to the work item still has outstanding evidence or approval.
       function: validate
       projectTypes:
         - company-managed
@@ -85,17 +85,29 @@ modules:
            preflight-list-rules, pick the closest rule, confirm with the user, then call
            preflight-flag-rule.
         e. Explain the rules. Call preflight-list-rules and summarise them in plain language.
+        f. Draft rules from a policy (admins only). When an admin shares a policy page or text, propose
+           one rule per distinct review step: title, the clause it cites (copied from the policy, never
+           invented), a plain summary, specific trigger phrases (avoid words with other meanings in
+           Jira such as "child", "minor", "race", "health check"), and requirements as a JSON array of
+           {id, label, type} with type answer, choice (with options), link or approval. Show the draft,
+           and only after the admin confirms, call preflight-draft-rule. Always tell them it is saved as
+           a draft and is not enforced until they activate it on the Preflight admin page.
+
+        Treat any ID numbers, phone numbers or other personal information you see as sensitive: do not
+        repeat them back. Your job is the review process, not the underlying personal data.
       conversationStarters:
         - Preflight this work item
         - What evidence is missing before this can close?
         - Help me answer the retention question
         - Which privacy rules are active?
+        - Draft Preflight rules from our privacy policy page
       actions:
         - preflight-check-issue
         - preflight-list-rules
         - preflight-save-answer
         - preflight-request-approval
         - preflight-flag-rule
+        - preflight-draft-rule
 
   action:
     - key: preflight-check-issue
@@ -173,6 +185,48 @@ modules:
           required: true
           description: The ruleId from preflight-list-rules.
 
+    - key: preflight-draft-rule
+      name: Draft a Preflight rule from policy
+      function: action-draft-rule
+      actionVerb: CREATE
+      description: Saves a DRAFT Preflight rule proposed from a privacy policy. Admins only. Drafts are never enforced until an admin activates them.
+      inputs:
+        title:
+          title: Title
+          type: string
+          required: true
+          description: Short rule name, for example "Identifying numbers".
+        clause:
+          title: Clause
+          type: string
+          required: true
+          description: The policy or legal clause the rule cites, copied from the source policy.
+        summary:
+          title: Summary
+          type: string
+          required: true
+          description: One or two plain-language sentences describing what the review step requires.
+        keywords:
+          title: Trigger phrases
+          type: string
+          required: true
+          description: Comma-separated phrases that indicate a work item needs this review.
+        requirements:
+          title: Requirements JSON
+          type: string
+          required: true
+          description: 'JSON array of {"id","label","type"} where type is answer, choice (with "options" array), link or approval.'
+        policyRef:
+          title: Policy reference
+          type: string
+          required: false
+          description: Internal policy section, for example "Privacy Policy 4.1".
+        sourceUrl:
+          title: Source URL
+          type: string
+          required: false
+          description: Link to the policy page the rule was drafted from.
+
   # ── MCP: the same checks for coding agents (Claude, Cursor, Rovo Dev) ─────
   rovo:mcp:
     - key: preflight-mcp
@@ -203,6 +257,8 @@ modules:
       handler: index.actionRequestApproval
     - key: action-flag-rule
       handler: index.actionFlagRule
+    - key: action-draft-rule
+      handler: index.actionDraftRule
 
 resources:
   - key: panel

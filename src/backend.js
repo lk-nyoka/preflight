@@ -3,8 +3,9 @@
  * product triggers, the install lifecycle hook, and the Rovo actions (which
  * the rovo:mcp module also exposes as MCP tools).
  */
-import { assess, syncProperty, saveAnswers, requestApproval, flagRule, PreflightError } from './service.js';
-import { getRules, saveRules, getSettings } from './store.js';
+import { assess, syncProperty, saveAnswers, requestApproval, flagRule, draftRuleFromPolicy, PreflightError } from './service.js';
+import { getRules, saveRules, getSettings, markGateSeen } from './store.js';
+import { redact } from './engine/evaluate.js';
 import { POPIA_RULES, POPIA_PACK_ID } from './rulepacks/popia.js';
 
 /* ------------------------------------------------------------------ */
@@ -19,6 +20,8 @@ import { POPIA_RULES, POPIA_PACK_ID } from './rulepacks/popia.js';
 export async function validateTransition({ issue }) {
   try {
     const { workItem, result } = await assess(issue.id || issue.key, { asUser: false });
+    // Heartbeat: lets the panel and admin page show whether the gate is attached in this project.
+    await markGateSeen(workItem.projectKey, workItem.key).catch(() => {});
     if (result.status === 'blocked') {
       return {
         result: false,
@@ -28,9 +31,14 @@ export async function validateTransition({ issue }) {
     return { result: true };
   } catch (error) {
     console.error('Preflight validator failed', error);
-    const { failClosed } = await getSettings().catch(() => ({ failClosed: false }));
+    // If even settings cannot be read, behave like the default: fail closed.
+    const { failClosed } = await getSettings().catch(() => ({ failClosed: true }));
     return failClosed
-      ? { result: false, errorMessage: 'Preflight could not check this work item. Try again, or ask a Jira admin.' }
+      ? {
+          result: false,
+          errorMessage:
+            'Preflight could not check this work item, so the transition is held (fail-closed mode). Try again in a minute, or ask a Jira admin to switch Preflight to fail-open.',
+        }
       : { result: true };
   }
 }
@@ -80,7 +88,7 @@ function forAgent(workItem, result) {
   return {
     ok: true,
     issueKey: workItem.key,
-    summary: workItem.summary,
+    summary: redact(workItem.summary),
     preflightStatus: result.status,
     statusMeaning: {
       'not-applicable': 'No active privacy rule matched. This is not a statement that the work is compliant.',
@@ -157,7 +165,7 @@ export async function actionRequestApproval(payload, context) {
   const key = issueKeyFrom(payload);
   if (!key) return fail('Which work item?');
   try {
-    return { ok: true, ...(await requestApproval(key, actorFrom(payload, context), payload?.message || '')) };
+    return { ok: true, ...(await requestApproval(key, actorFrom(payload, context), payload?.message || '', 'agent')) };
   } catch (error) {
     return fail(error.message);
   }
@@ -171,5 +179,37 @@ export async function actionFlagRule(payload, context) {
     return forAgent(workItem, result);
   } catch (error) {
     return fail(error.message);
+  }
+}
+
+/**
+ * Draft a rule from a policy the agent has read (for example a Confluence policy
+ * page). Saved as a DRAFT only; a Jira admin reviews and activates it on the
+ * Preflight admin page. The model never changes what is enforced.
+ */
+export async function actionDraftRule(payload, context) {
+  try {
+    const rule = await draftRuleFromPolicy(
+      {
+        title: payload?.title,
+        clause: payload?.clause,
+        policyRef: payload?.policyRef,
+        summary: payload?.summary,
+        keywords: payload?.keywords,
+        labels: payload?.labels,
+        requirements: payload?.requirements,
+        sourceUrl: payload?.sourceUrl,
+      },
+      actorFrom(payload, context),
+    );
+    return {
+      ok: true,
+      ruleId: rule.id,
+      status: 'draft',
+      next: 'Saved as a draft. It is NOT enforced until a Jira admin reviews it and clicks Activate in Jira settings > Apps > Preflight.',
+      rule: { title: rule.title, clause: rule.clause, keywords: rule.triggers.keywords, requirements: rule.requirements.map((r) => r.label) },
+    };
+  } catch (error) {
+    return fail(error instanceof PreflightError ? error.message : `Could not save the draft: ${error.message}`);
   }
 }

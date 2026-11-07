@@ -1,7 +1,8 @@
 /**
  * POPIA starter rule pack.
  *
- * These rules encode a typical organisation's INTERNAL privacy review steps,
+ * Editable STARTER review rules inspired by selected POPIA themes. They are
+ * not a complete POPIA assessment. They encode a typical organisation's INTERNAL privacy review steps,
  * each anchored to the section of the Protection of Personal Information Act,
  * 2013 (Act 4 of 2013) that motivates it. They are a starting template for an
  * Information Officer to review, edit and activate. They are not legal advice
@@ -10,8 +11,9 @@
  * Section references used:
  *   s1      definition of "personal information" (includes identifying numbers)
  *   s10     minimality
- *   s11     consent, justification and objection
+ *   s11     lawfulness of processing (consent, justification and objection)
  *   s13     collection for a specific purpose
+ *   s18     notification to data subject when collecting personal information
  *   s14     retention and restriction of records
  *   s19     security measures on integrity and confidentiality
  *   s26-27  special personal information (prohibition and general authorisation)
@@ -33,11 +35,11 @@ export const POPIA_RULES = [
   {
     id: 'popia-identifiers',
     title: 'Identifying numbers',
-    clause: 'POPIA s1, s10, s13, s14',
+    clause: 'POPIA s1, s10, s11, s13, s14, s18',
     policyRef: 'Privacy Policy 4.1 – Collecting identifiers',
     severity: 'high',
     summary:
-      'Work that collects or stores ID numbers, passport numbers or similar identifiers must record why the identifier is needed, why less data will not do, and how long it is kept.',
+      'This work may collect or store an identifier (ID, passport or similar number). Record your review: why it is needed, why less data will not do, the lawful basis, how people are told, and how long it is kept.',
     triggers: {
       keywords: [
         'id number', 'identity number', 'sa id', 'rsa id', 'national id', 'passport number', 'passport',
@@ -48,6 +50,21 @@ export const POPIA_RULES = [
     requirements: [
       { id: 'purpose', label: 'Specific purpose for collecting it', type: 'answer', clause: 's13', help: 'What exactly will the identifier be used for?' },
       { id: 'minimality', label: 'Why less data will not do', type: 'answer', clause: 's10', help: 'E.g. why date of birth or a verification token is not enough.' },
+      {
+        id: 'lawful-basis',
+        label: 'Lawful basis for processing',
+        type: 'choice',
+        clause: 's11(1)',
+        options: [
+          'Consent of the data subject',
+          'Necessary to conclude or perform a contract with the data subject',
+          'Required to comply with an obligation imposed by law',
+          'Protects a legitimate interest of the data subject',
+          'Necessary for a public body to perform a public law duty',
+          'Legitimate interests of the organisation or a third party',
+        ],
+      },
+      { id: 'notification', label: 'How people are told at collection', type: 'answer', clause: 's18', help: 'E.g. "Signup screen links to the privacy notice, which lists the ID number and why".' },
       { id: 'retention', label: 'Retention period and deletion trigger', type: 'answer', clause: 's14', help: 'E.g. "Deleted 5 years after account closure (FICA)".' },
       approval(),
     ],
@@ -59,7 +76,7 @@ export const POPIA_RULES = [
     policyRef: 'Privacy Policy 5 – Special personal information',
     severity: 'high',
     summary:
-      'Health, biometric, religious, race or ethnic origin, trade union, political, sex life and criminal behaviour data may only be processed under one of the authorisations in section 27.',
+      'This work may involve special personal information (health, biometric, religion, race or ethnic origin, trade union, political, sex life or criminal behaviour). Record which section 27 authorisation your organisation relies on and the security review.',
     triggers: {
       keywords: [
         'medical', 'health data', 'health record', 'health information', 'diagnosis', 'allergy', 'allergies', 'disability', 'biometric', 'fingerprint',
@@ -94,7 +111,7 @@ export const POPIA_RULES = [
     policyRef: 'Privacy Policy 6 – Children',
     severity: 'high',
     summary:
-      'Processing personal information of children (under 18) is prohibited unless a section 35 authorisation applies, usually the consent of a competent person such as a parent or guardian.',
+      'This work may involve personal information of children (under 18). Record how consent from a parent or guardian (or another section 35 authorisation) is obtained and how age is determined.',
     triggers: {
       // Deliberately avoids "child", "children" and "minor": in Jira those usually mean child issues or minor versions.
       keywords: ['learner', 'learners', 'pupil', 'pupils', 'under 18', 'kids', 'children s data', 'child data', 'parental consent', 'parent consent', 'guardian', 'school learners'],
@@ -113,7 +130,7 @@ export const POPIA_RULES = [
     policyRef: 'Privacy Policy 7 – Marketing',
     severity: 'medium',
     summary:
-      'Unsolicited electronic marketing (email, SMS, WhatsApp, automated calls) needs prior consent, or an existing-customer relationship for similar products, and every message must offer an opt-out.',
+      'This work may send electronic direct marketing (email, SMS, WhatsApp, automated calls). Record the basis for contacting each recipient and how every message offers an opt-out.',
     triggers: {
       keywords: [
         'marketing email', 'newsletter', 'promo', 'promotional', 'campaign', 'sms blast', 'bulk sms', 'whatsapp broadcast',
@@ -139,7 +156,7 @@ export const POPIA_RULES = [
     policyRef: 'Privacy Policy 8 – Vendors and hosting',
     severity: 'high',
     summary:
-      'Sending personal information to a recipient in another country needs an adequate level of protection there, binding agreements, consent, or another section 72 ground.',
+      'This work may send personal information to a recipient outside South Africa. Record the destination and which section 72 ground your organisation relies on.',
     triggers: {
       keywords: [
         'offshore', 'overseas', 'us region', 'eu region', 'us-east', 'eu-west', 'third party vendor', 'third-party vendor',
@@ -172,7 +189,7 @@ export const POPIA_RULES = [
     policyRef: 'Privacy Policy 9 – Security safeguards',
     severity: 'medium',
     summary:
-      'Exports, dumps and shared copies of personal information need identified security safeguards and a plan to delete the copy.',
+      'This work may create an export, dump or shared copy of personal information. Record the safeguards for the copy and when it is deleted.',
     triggers: {
       keywords: ['csv export', 'data export', 'export customers', 'customer list', 'data dump', 'database dump', 'share with vendor', 'spreadsheet of customers', 'download all users'],
       labels: ['export'],

@@ -15,7 +15,7 @@ import ForgeReconciler, {
 import { invoke } from '@forge/bridge';
 
 const STATUS = {
-  'not-applicable': { appearance: 'default', label: 'No privacy rules apply' },
+  'not-applicable': { appearance: 'default', label: 'No configured rule matched' },
   blocked: { appearance: 'removed', label: 'Blocked' },
   clear: { appearance: 'success', label: 'Clear to close' },
   exception: { appearance: 'moved', label: 'Exception recorded' },
@@ -66,6 +66,9 @@ function RuleCard({ match, savedAnswers, canApprove, selfApprovalBlocked, act, b
         <Text>
           <Strong>Why this matched: </Strong>
           {match.why.manual ? 'flagged manually' : ''}
+          {match.why.sticky
+            ? `matched earlier ("${(match.why.firstMatched?.phrases || []).join('", "')}"). It stays open after rewording until an approver dismisses it`
+            : ''}
           {match.why.keywords.length ? `phrases "${match.why.keywords.join('", "')}"` : ''}
           {match.why.labels.length ? ` labels ${match.why.labels.join(', ')}` : ''}
         </Text>
@@ -150,6 +153,7 @@ const App = () => {
   const [notice, setNotice] = useState(null);
   const [flagChoice, setFlagChoice] = useState(null);
   const [exceptionReason, setExceptionReason] = useState('');
+  const [exceptionDays, setExceptionDays] = useState('30');
 
   const apply = (next) => {
     if (next?.ok === false) setError(next.error);
@@ -190,8 +194,37 @@ const App = () => {
         <Button appearance="subtle" isDisabled={busy} onClick={() => act('getState')}>Re-check</Button>
       </Inline>
 
+      <Text>
+        <Em>
+          Starter review rules, not legal advice. Your Information Officer decides which rules are active, and only a
+          named approver can sign off.
+        </Em>
+      </Text>
+
       {error && <SectionMessage appearance="error"><Text>{error}</Text></SectionMessage>}
       {notice && <SectionMessage appearance="success"><Text>{notice}</Text></SectionMessage>}
+
+      {state.hasActiveRules && !state.gate && (
+        <SectionMessage appearance="warning" title="The Preflight gate has not run in this project yet">
+          <Text>
+            Until a Jira admin adds "Preflight privacy review gate" to the transition into Done, moving work to Done is
+            not checked. See Jira settings → Apps → Preflight → Demo setup.
+          </Text>
+        </SectionMessage>
+      )}
+
+      {result.status === 'not-applicable' && state.hasActiveRules && (
+        <Text>
+          This does not mean the work has no privacy impact. If it changes how personal information is collected, used,
+          stored or shared, flag a rule below.
+        </Text>
+      )}
+
+      {state.canApprove && state.approverMode === 'small-team' && (
+        <Text>
+          <Em>Small-team mode: no named approvers are set, so Jira admins can approve. Name your Information Officer in Preflight settings.</Em>
+        </Text>
+      )}
 
       {!state.hasActiveRules && (
         <SectionMessage appearance="information" title="No rules are active yet">
@@ -212,10 +245,13 @@ const App = () => {
       )}
 
       {state.exception && (
-        <SectionMessage appearance="discovery" title="Exception recorded">
+        <SectionMessage appearance="discovery" title={result.exceptionExpired ? 'Exception expired' : 'Exception recorded'}>
           <Inline space="space.100" alignBlock="center" shouldWrap>
             <User accountId={state.exception.by} />
-            <Text>{state.exception.reason} ({when(state.exception.at)})</Text>
+            <Text>
+              {state.exception.reason} ({when(state.exception.at)}
+              {state.exception.expiresAt ? `, expires ${when(state.exception.expiresAt)}` : ''})
+            </Text>
           </Inline>
           {state.canApprove && (
             <Inline><Button appearance="subtle" isDisabled={busy} onClick={() => act('clearException')}>Withdraw exception</Button></Inline>
@@ -266,10 +302,14 @@ const App = () => {
 
       {state.canApprove && result.status === 'blocked' && (
         <Stack space="space.050">
-          <Label labelFor="exception">Approver: grant an exception for the whole work item (kept in the audit trail)</Label>
+          <Label labelFor="exception">
+            Approver: the rules apply, but accept a time-limited deviation for this work item (reason kept in the audit trail)
+          </Label>
+          <Textfield id="exception" value={exceptionReason} placeholder="Reason" onChange={(e) => setExceptionReason(e.target.value)} />
           <Inline space="space.100" alignBlock="center">
-            <Textfield id="exception" value={exceptionReason} onChange={(e) => setExceptionReason(e.target.value)} />
-            <Button isDisabled={!exceptionReason.trim() || busy} onClick={() => act('setException', { reason: exceptionReason })}>
+            <Label labelFor="exception-days">Valid for (days)</Label>
+            <Textfield id="exception-days" type="number" width={80} value={exceptionDays} onChange={(e) => setExceptionDays(e.target.value)} />
+            <Button isDisabled={!exceptionReason.trim() || busy} onClick={() => act('setException', { reason: exceptionReason, days: Number(exceptionDays) })}>
               Grant exception
             </Button>
           </Inline>

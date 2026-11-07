@@ -10,4 +10,5 @@ export {
   actionSaveAnswer,
   actionRequestApproval,
   actionFlagRule,
+  actionDraftRule,
 } from './backend.js';

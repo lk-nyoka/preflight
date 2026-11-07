@@ -32,12 +32,14 @@ test('blocked until answers and approval exist, then clear', () => {
   const work = { text: textOf(DEMO_ISSUES[0]) };
   const rules = active.filter((r) => r.id === 'popia-identifiers');
   assert.equal(evaluate(work, rules, {}).status, 'blocked');
-  assert.equal(evaluate(work, rules, {}).openCount, 4);
+  assert.equal(evaluate(work, rules, {}).openCount, 6);
 
   const answers = {
     'popia-identifiers': {
       purpose: { value: 'Verify callers against FICA records' },
       minimality: { value: 'Date of birth is shared by many customers' },
+      'lawful-basis': { value: 'Required to comply with an obligation imposed by law' },
+      notification: { value: 'Signup screen links to the privacy notice section on ID numbers' },
       retention: { value: 'Deleted 5 years after account closure' },
     },
   };
@@ -57,6 +59,8 @@ test('approval goes stale when answers or the rule change afterwards', () => {
     'popia-identifiers': {
       purpose: { value: 'Verify callers against FICA records' },
       minimality: { value: 'Date of birth is shared by many customers' },
+      'lawful-basis': { value: 'Required to comply with an obligation imposed by law' },
+      notification: { value: 'Signup screen links to the privacy notice section on ID numbers' },
       retention: { value: 'Deleted 5 years after account closure' },
     },
   };
@@ -98,4 +102,16 @@ test('dismissal and manual flag', () => {
 test('exception unblocks but is reported as exception, not clear', () => {
   const result = evaluate({ text: textOf(DEMO_ISSUES[0]) }, active, { exception: { by: 'a', reason: 'Regulator-approved pilot' } });
   assert.equal(result.status, 'exception');
+});
+
+test('snippets never carry ID or phone numbers', async () => {
+  const { redact } = await import('../src/engine/evaluate.js');
+  assert.equal(redact('Customer 9001015800087 called from +27 11 555 0100'), 'Customer [number removed] called from [number removed]');
+  const r = evaluate({ text: 'Store SA ID number 9001015800087 on the profile' }, active, {});
+  assert.ok(!/9001015800087/.test(r.applicable[0].why.snippet));
+});
+
+test('no match is reported as "no configured rule matched", never as compliant', () => {
+  const r = evaluate({ text: 'Update footer copyright year' }, active, {});
+  assert.match(r.summary, /No configured privacy rule matched/);
 });

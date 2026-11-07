@@ -10,12 +10,15 @@
  *   rules          -> array of rule objects (small; one key keeps updates atomic)
  *   settings       -> { approverAccountIds: [], failClosed: false }
  *   rec:<issueId>  -> evidence record for one work item
+ *   gates          -> { [projectKey]: { lastRunAt, lastIssueKey } } validator heartbeat
  */
 import { kvs } from '@forge/kvs';
 
 const AUDIT_LIMIT = 100;
 
-export const DEFAULT_SETTINGS = { approverAccountIds: [], failClosed: false };
+// Fail closed by default: Preflight is a control, so if it cannot evaluate a work
+// item it refuses the transition (with a clear message) rather than letting it through.
+export const DEFAULT_SETTINGS = { approverAccountIds: [], failClosed: true, separationOfDuties: false };
 
 export async function getRules() {
   return (await kvs.get('rules')) || [];
@@ -37,7 +40,7 @@ export async function saveSettings(patch) {
 }
 
 export function emptyRecord() {
-  return { answers: {}, approvals: {}, manual: [], dismissals: {}, exception: null, audit: [] };
+  return { answers: {}, approvals: {}, manual: [], matched: {}, dismissals: {}, exception: null, audit: [] };
 }
 
 export async function getRecord(issueId) {
@@ -54,4 +57,18 @@ export async function updateRecord(issueId, actor, event, mutate) {
   record.audit = [{ at: Date.now(), by: actor || 'app', event }, ...(record.audit || [])].slice(0, AUDIT_LIMIT);
   await kvs.set(`rec:${issueId}`, record);
   return record;
+}
+
+/** Record that the workflow validator ran in a project, so the UI can tell whether the gate is attached. */
+export async function markGateSeen(projectKey, issueKey) {
+  if (!projectKey) return;
+  const gates = (await kvs.get('gates')) || {};
+  // At most one write per project per hour keeps the validator fast.
+  if (gates[projectKey]?.lastRunAt > Date.now() - 60 * 60 * 1000) return;
+  gates[projectKey] = { lastRunAt: Date.now(), lastIssueKey: issueKey };
+  await kvs.set('gates', gates);
+}
+
+export async function getGates() {
+  return (await kvs.get('gates')) || {};
 }

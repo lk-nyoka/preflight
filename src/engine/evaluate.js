@@ -34,9 +34,18 @@ export function findKeywordHits(text, keywords = []) {
   return hits;
 }
 
+/**
+ * Mask long digit runs (ID numbers, phone and account numbers) so evidence
+ * snippets shown in the panel, comments and to Rovo/MCP never carry the
+ * personal information itself. Data minimisation inside the privacy tool.
+ */
+export function redact(text) {
+  return String(text || '').replace(/\+?\d[\d\s-]{5,}\d/g, '[number removed]');
+}
+
 /** A short, readable fragment of the text around the first hit, shown as evidence. */
 export function snippetAround(text, phrase, radius = 60) {
-  const source = String(text || '').replace(/\s+/g, ' ');
+  const source = redact(String(text || '').replace(/\s+/g, ' '));
   const index = source.toLowerCase().indexOf(String(phrase).toLowerCase());
   if (index < 0) return null;
   const start = Math.max(0, index - radius);
@@ -106,10 +115,14 @@ function evaluateRequirement(rule, requirement, record) {
  * @returns {{ status, applicable, dismissed, openCount, summary }}
  *   status is one of: 'not-applicable' | 'blocked' | 'clear' | 'exception'
  */
-export function evaluate(workItem, rules = [], record = {}) {
+export function evaluate(workItem, rules = [], record = {}, now = Date.now()) {
   const text = workItem?.text || '';
   const labels = (workItem?.labels || []).map((l) => String(l).toLowerCase());
   const manual = new Set(record.manual || []);
+  // Once a rule has matched a work item it stays applicable, even if the text is
+  // later reworded, until an approver dismisses it. Editing out "ID number" does
+  // not open the gate.
+  const sticky = new Set(Object.keys(record.matched || {}));
   const applicable = [];
   const dismissed = [];
 
@@ -118,7 +131,8 @@ export function evaluate(workItem, rules = [], record = {}) {
     const keywordHits = findKeywordHits(text, rule.triggers?.keywords);
     const labelHits = (rule.triggers?.labels || []).filter((l) => labels.includes(String(l).toLowerCase()));
     const flaggedManually = manual.has(rule.id);
-    if (!keywordHits.length && !labelHits.length && !flaggedManually) continue;
+    const previouslyMatched = sticky.has(rule.id);
+    if (!keywordHits.length && !labelHits.length && !flaggedManually && !previouslyMatched) continue;
 
     const match = {
       ruleId: rule.id,
@@ -131,12 +145,14 @@ export function evaluate(workItem, rules = [], record = {}) {
         keywords: keywordHits,
         labels: labelHits,
         manual: flaggedManually,
+        sticky: previouslyMatched && !keywordHits.length && !labelHits.length && !flaggedManually,
+        firstMatched: record.matched?.[rule.id] || null,
         snippet: keywordHits.length ? snippetAround(text, keywordHits[0]) : null,
       },
     };
 
     const dismissal = record.dismissals?.[rule.id];
-    if (dismissal && !flaggedManually) {
+    if (dismissal) {
       dismissed.push({ ...match, dismissal });
       continue;
     }
@@ -158,23 +174,27 @@ export function evaluate(workItem, rules = [], record = {}) {
     m.requirements.filter((r) => !r.satisfied).map((r) => ({ ...r, ruleId: m.ruleId, ruleTitle: m.title, ruleClause: m.clause })),
   );
 
+  const exceptionActive = Boolean(record.exception) && (!record.exception.expiresAt || record.exception.expiresAt > now);
+  const exceptionExpired = Boolean(record.exception) && !exceptionActive;
+
   let status = 'not-applicable';
   if (applicable.length) status = open.length ? 'blocked' : 'clear';
-  if (status === 'blocked' && record.exception) status = 'exception';
+  if (status === 'blocked' && exceptionActive) status = 'exception';
 
   return {
     status,
+    exceptionExpired,
     applicable,
     dismissed,
     open,
     openCount: open.length,
-    summary: describe(status, applicable, open),
+    summary: describe(status, applicable, open) + (exceptionExpired && status === 'blocked' ? ' The earlier exception has expired.' : ''),
   };
 }
 
 /** One human sentence for the validator error, comments and agent replies. */
 export function describe(status, applicable, open) {
-  if (status === 'not-applicable') return 'No privacy rules apply to this work item.';
+  if (status === 'not-applicable') return 'No configured privacy rule matched this work item.';
   if (status === 'clear') return `All ${applicable.length} applicable privacy rule(s) have their evidence and approvals.`;
   if (status === 'exception') return 'An approver recorded an exception for this work item.';
   const byRule = {};

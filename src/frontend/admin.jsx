@@ -142,7 +142,9 @@ const App = () => {
       <Heading size="medium">Preflight</Heading>
       <Text>
         Preflight turns your privacy policy into review steps that Jira enforces before work is closed. Rules start as
-        drafts; only active rules are enforced. Preflight checks your own review process and is not legal advice.
+        drafts; only active rules are enforced. The POPIA pack is an editable starter set of review rules, not a complete
+        POPIA assessment and not legal advice: have your Information Officer or privacy counsel review each rule before
+        activating it.
       </Text>
       {error && <SectionMessage appearance="error"><Text>{error}</Text></SectionMessage>}
       {notice && <SectionMessage appearance="success"><Text>{notice}</Text></SectionMessage>}
@@ -227,17 +229,29 @@ const App = () => {
               <List type="ordered">
                 <ListItem><Text>Open the project → Project settings → Workflows (company-managed) or the board's workflow editor (team-managed).</Text></ListItem>
                 <ListItem><Text>Select the transition into Done (or "Any status → Done") → Rules / Validators → Add rule.</Text></ListItem>
-                <ListItem><Text>Choose <Strong>Preflight privacy evidence gate</Strong> and publish the workflow.</Text></ListItem>
+                <ListItem><Text>Choose <Strong>Preflight privacy review gate</Strong> and publish the workflow.</Text></ListItem>
+                <ListItem><Text>Repeat for every workflow whose transitions lead to Done. The status list below shows each project where the gate has run.</Text></ListItem>
                 <ListItem><Text>Try moving a sample work item to Done. It is blocked until the Preflight panel is complete.</Text></ListItem>
               </List>
             </SectionMessage>
+            <Text><Strong>Gate status by project</Strong> (updated when the gate runs)</Text>
+            {Object.keys(state.gates || {}).length === 0 ? (
+              <Text><Em>The gate has not run in any project yet. Attach it, then try a transition.</Em></Text>
+            ) : (
+              Object.entries(state.gates).map(([key, g]) => (
+                <Text key={key}>{key}: gate active, last ran {new Date(g.lastRunAt).toLocaleString()} on {g.lastIssueKey}</Text>
+              ))
+            )}
             <Text>Tip: search for blocked work with JQL <Code>preflightStatus = blocked</Code>.</Text>
           </Stack>
         </TabPanel>
 
         <TabPanel>
           <Stack space="space.150">
-            <Label labelFor="approvers">Approvers (Information Officer and deputies). Jira admins can always approve.</Label>
+            <Label labelFor="approvers">
+              Approvers (Information Officer and deputies). Once you name approvers, only they can approve. With none, Jira
+              admins approve (small-team mode).
+            </Label>
             <UserPicker
               name="approvers"
               label="Approvers"
@@ -254,7 +268,10 @@ const App = () => {
             </Inline>
             <Inline space="space.100" alignBlock="center">
               <Toggle id="fail" isChecked={Boolean(state.settings.failClosed)} onChange={() => call('saveSettings', { failClosed: !state.settings.failClosed })} />
-              <Label labelFor="fail">Fail closed: block transitions if Preflight itself errors (default: allow and log)</Label>
+              <Label labelFor="fail">
+                Fail closed (recommended, on by default): if Preflight cannot evaluate a work item, the transition is held with
+                a clear message. Turn off to let work through and log the error instead.
+              </Label>
             </Inline>
           </Stack>
         </TabPanel>
