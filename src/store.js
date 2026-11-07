@@ -68,15 +68,21 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
  * a person) saving at the same moment cannot overwrite each other's changes.
  * The lock expires after 10 seconds even if a function crashes.
  */
-export async function withLock(issueId, fn, { attempts = 8 } = {}) {
+export async function withLock(issueId, fn, { attempts = 10 } = {}) {
   const key = `lock:${issueId}`;
   const token = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
   for (let i = 0; i < attempts; i += 1) {
     let acquired = false;
     try {
-      await kvs.set(key, { token }, { keyPolicy: 'FAIL_IF_EXISTS', ttl: { value: 10, unit: 'SECONDS' } });
+      await kvs.set(key, { token, exp: Date.now() + 10000 }, { keyPolicy: 'FAIL_IF_EXISTS', ttl: { value: 10, unit: 'SECONDS' } });
       acquired = true;
     } catch {
+      // If storage did not expire a crashed holder's lock, take it over once its own deadline has passed.
+      const held = await kvs.get(key).catch(() => null);
+      if (held && (!held.exp || held.exp < Date.now() - 1000)) {
+        await kvs.delete(key).catch(() => {});
+        continue;
+      }
       await sleep(120 + i * 80);
     }
     if (acquired) {
@@ -163,7 +169,7 @@ export async function setQueueEntry(issueId, entry) {
   else await kvs.delete(`queue:${issueId}`);
 }
 
-export async function listQueue({ maxPages = 10 } = {}) {
+export async function listQueue({ maxPages = 50 } = {}) {
   const out = [];
   let cursor;
   for (let page = 0; page < maxPages; page += 1) {

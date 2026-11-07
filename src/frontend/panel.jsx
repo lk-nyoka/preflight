@@ -76,8 +76,12 @@ function NextStep({ state, act, busy }) {
   }
   if (done.status === 'blocked') {
     const items = done.open.map((o) => o.label);
+    const approved = result.applicable.some((m) => m.requirements.some((r) => r.type === 'approval' && r.satisfied));
+    const title = build.status === 'exception'
+      ? 'Work can start under an approver\'s exception'
+      : approved ? 'Approved: work can start' : 'Review complete: work can start';
     return (
-      <SectionMessage appearance="information" title="Approved: work can start">
+      <SectionMessage appearance="information" title={title}>
         <Text>Before moving to Done, add: {items.join('; ')}.</Text>
       </SectionMessage>
     );
@@ -86,6 +90,19 @@ function NextStep({ state, act, busy }) {
     return <SectionMessage appearance="success" title="Privacy review complete"><Text>All review steps for this work item are recorded. This is your organisation's review, not a legal compliance decision.</Text></SectionMessage>;
   }
   return null;
+}
+
+/** One readable sentence for why a rule applies. */
+export function whyText(why) {
+  const parts = [];
+  if (why.keywords.length) parts.push(`mentions "${why.keywords.join('", "')}"`);
+  if (why.labels.length) parts.push(`has the label ${why.labels.join(', ')}`);
+  if (why.declared) parts.push('someone declared this work affects personal information');
+  else if (why.manual) parts.push('flagged by a teammate');
+  if (why.sticky) parts.push(`matched earlier ("${(why.firstMatched?.phrases || []).join('", "')}"), and it stays until an approver dismisses it`);
+  let text = parts.join('; ') || 'matched earlier';
+  if (why.reopened?.length) text += `. Re-opened: it was dismissed earlier, but now also mentions "${why.reopened.join('", "')}"`;
+  return text;
 }
 
 function RequirementInput({ requirement, value, onChange }) {
@@ -153,14 +170,7 @@ function RuleCard({ match, state, act, busy }) {
           </Lozenge>
         </Inline>
         <Text>{match.summary}</Text>
-        <Text>
-          <Strong>Why: </Strong>
-          {why.keywords.length ? `mentions "${why.keywords.join('", "')}"` : ''}
-          {why.labels.length ? ` label ${why.labels.join(', ')}` : ''}
-          {why.declared ? 'you declared this work affects personal information' : why.manual ? 'flagged by a teammate' : ''}
-          {why.sticky ? `matched earlier ("${(why.firstMatched?.phrases || []).join('", "')}"); it stays until an approver dismisses it` : ''}
-          {why.reopened?.length ? `. Re-opened: it was dismissed earlier, but now also mentions "${why.reopened.join('", "')}"` : ''}
-        </Text>
+        <Text><Strong>Why: </Strong>{whyText(why)}</Text>
         {why.snippet && <Text><Em>{why.snippet}</Em></Text>}
 
         {section('build', 'Before work starts')}
@@ -175,13 +185,13 @@ function RuleCard({ match, state, act, busy }) {
             ) : (
               <Inline space="space.100" alignBlock="center" shouldWrap>
                 <Text><Em>{approvalReq.reason}</Em></Text>
-                {state.canApprove && !state.selfApprovalBlocked && (
+                {state.canApprove && !state.separation?.[match.ruleId] && (
                   <Button appearance="primary" isDisabled={!buildInputsDone || dirty || busy} onClick={() => act('approve', { ruleId: match.ruleId })}>Approve</Button>
                 )}
               </Inline>
             )}
             {state.canApprove && !buildInputsDone && <Text><Em>Approve unlocks once the answers above are saved.</Em></Text>}
-            {state.canApprove && state.selfApprovalBlocked && <Text><Em>Separation of duties: you reported this work item, so another approver must approve.</Em></Text>}
+            {state.canApprove && state.separation?.[match.ruleId] && <Text><Em>Separation of duties: {state.separation[match.ruleId]}, so another approver must approve.</Em></Text>}
           </Stack>
         )}
         {section('done', 'Before Done')}
@@ -196,7 +206,7 @@ function RuleCard({ match, state, act, busy }) {
           <Inline><Button appearance="subtle" onClick={() => setShowDismiss(true)}>This rule does not apply…</Button></Inline>
         ) : (
           <Stack space="space.050">
-            <Label labelFor={`dismiss-${match.ruleId}`}>Why it does not apply (kept in the audit history)</Label>
+            <Label labelFor={`dismiss-${match.ruleId}`}>Why it does not apply (kept in the audit history; do not include anyone's personal details)</Label>
             <Textfield id={`dismiss-${match.ruleId}`} value={dismissReason} onChange={(e) => setDismissReason(e.target.value)} />
             <ButtonGroup>
               <Button isDisabled={dismissReason.trim().length < 10 || busy} onClick={() => act('dismissRule', { ruleId: match.ruleId, reason: dismissReason })}>Dismiss rule</Button>
@@ -265,6 +275,25 @@ const App = () => {
 
       <NextStep state={state} act={act} busy={busy} />
 
+      {state.bypass && !state.bypass.resolvedAt && (
+        <SectionMessage appearance="error" title={`This work item is in "${state.bypass.status}" with its privacy review still open`}>
+          <Text>It got past a Preflight gate without the review being complete (moved project, changed work type, a workflow without the gate, or the review went stale afterwards). The approvers have been told. Finish the steps below.</Text>
+        </SectionMessage>
+      )}
+
+      {state.pendingReset && state.canApprove && state.approverMode === 'named-approvers' && (
+        <SectionMessage appearance="warning" title="A Jira admin asked to remove the named approvers">
+          <Text>Reason: {state.pendingReset.reason}. {state.pendingReset.confirmedBy ? 'A second admin confirmed it.' : 'It still needs a second admin to confirm.'} It takes effect {when(state.pendingReset.effectiveAt)} unless an approver cancels it in Apps → Preflight reviews.</Text>
+        </SectionMessage>
+      )}
+
+      {state.declaration && state.declaration.value !== 'no' && (
+        <Inline space="space.100" alignBlock="center" shouldWrap>
+          <Text>Declared "{state.declaration.value === 'yes' ? 'Yes' : 'Unsure'}" by</Text><User accountId={state.declaration.by} />
+          <Text><Em>Only an approver can lower another person's declaration.</Em></Text>
+        </Inline>
+      )}
+
       {state.hasActiveRules && !state.gate && (
         <SectionMessage appearance="warning" title="The Preflight gates have not run in this project yet">
           <Text>Until a Jira admin attaches them to this project's workflow, moving work is not checked. Jira settings → Apps → Preflight → Setup.</Text>
@@ -311,7 +340,7 @@ const App = () => {
             <User accountId={state.exception.by} />
             <Text>{state.exception.reason}. Granted {when(state.exception.at)}, expires {when(state.exception.expiresAt)}.</Text>
           </Inline>
-          <Text><Em>Covers only the rules that were open when it was granted. Rules that match later are not waived.</Em></Text>
+          <Text><Em>Covers only the rules that were open when it was granted, and only the wording they matched then. New rules or new wording are not waived.</Em></Text>
           {state.canApprove && <Inline><Button appearance="subtle" isDisabled={busy} onClick={() => act('clearException')}>Withdraw exception</Button></Inline>}
         </SectionMessage>
       )}
@@ -328,7 +357,7 @@ const App = () => {
 
       {state.canApprove && result.status === 'blocked' && (
         <Stack space="space.050">
-          <Label labelFor="exception">Approver only: the rules apply, but accept a time-limited deviation (reason is audited)</Label>
+          <Label labelFor="exception">Approver only: the rules apply, but accept a time-limited deviation (the reason is kept in the audit history; do not include anyone's personal details)</Label>
           <Textfield id="exception" value={exceptionReason} placeholder="Reason (at least 10 characters)" onChange={(e) => setExceptionReason(e.target.value)} />
           <Inline space="space.100" alignBlock="center">
             <Label labelFor="exception-days">Days (max 90)</Label>

@@ -7,7 +7,7 @@
 import Resolver from '@forge/resolver';
 import {
   assess, saveAnswers, approve, revokeApproval, flagRule, dismissRule, restoreRule, setException, clearException,
-  requestApproval, canCurrentUserApprove, approverMode, syncIndexes, declare, discardDraft, PreflightError,
+  requestApproval, canCurrentUserApprove, approverMode, syncIndexes, declare, discardDraft, separationReason, PreflightError,
 } from '../service.js';
 import { getSettings, getGates, listAudit } from '../store.js';
 
@@ -35,7 +35,12 @@ async function view(state, accountId, extra = {}) {
     approverMode: mode,
     approvers: settings.approverAccountIds,
     requireDeclaration: settings.requireDeclaration,
-    selfApprovalBlocked: Boolean(settings.separationOfDuties && state.workItem.reporterAccountId === accountId),
+    // Same check the server applies on approve: reporter, assignee and anyone who answered.
+    separation: Object.fromEntries(state.result.applicable
+      .map((m) => [m.ruleId, separationReason(settings, state.workItem, state.record, m.ruleId, accountId)])
+      .filter(([, reason]) => reason)),
+    pendingReset: settings.pendingReset || null,
+    bypass: state.record.bypass || null,
     exception: state.record.exception,
     answers: state.record.answers || {},
     drafts: state.record.drafts || {},
@@ -65,7 +70,7 @@ const me = (req) => req.context.accountId;
 
 define('getState', async (req) => {
   const state = await assess(issueFrom(req));
-  await syncIndexes(state.workItem, state.result).catch(() => {});
+  await syncIndexes(state.workItem, state.result, state.record).catch(() => {});
   return view(state, me(req));
 });
 

@@ -19,7 +19,11 @@ function table(items, emptyText) {
         cells: [
           { key: 'k', content: <Stack space="space.025"><Link href={`/browse/${i.key}`}>{i.key}</Link><Text>{i.summary}</Text></Stack> },
           { key: 'r', content: <TagGroup>{i.rules.map((r) => <Tag key={r} text={r} />)}</TagGroup> },
-          { key: 'o', content: <Lozenge appearance={i.buildStatus === 'blocked' ? 'removed' : 'inprogress'}>{i.buildStatus === 'blocked' ? `${i.openBuild} before build` : `${i.openTotal} before Done`}</Lozenge> },
+          { key: 'o', content: <Stack space="space.025">
+            <Lozenge appearance={i.buildStatus === 'blocked' ? 'removed' : 'inprogress'}>{i.buildStatus === 'blocked' ? `${i.openBuild} before build` : `${i.openTotal} before Done`}</Lozenge>
+            {i.exception?.expiresAt && <Text>{`Exception expires ${when(i.exception.expiresAt)}`}</Text>}
+            {i.bypassed && <Text>{`In "${i.bypassed.status}" since ${when(i.bypassed.at)}`}</Text>}
+          </Stack> },
           { key: 'u', content: when(i.updatedAt) },
         ],
       }))}
@@ -46,14 +50,18 @@ const App = () => {
 
   if (error && !data) return <SectionMessage appearance="error" title="Could not load reviews"><Text>{error}</Text></SectionMessage>;
   if (!data) return <Spinner label="Loading reviews" />;
-  const diffText = (d) => !d ? null : [
-    d.phrasesAdded?.length ? `adds phrases: ${d.phrasesAdded.join(', ')}` : null,
-    d.phrasesRemoved?.length ? `REMOVES phrases: ${d.phrasesRemoved.join(', ')}` : null,
-    d.requirementsAdded?.length ? `adds: ${d.requirementsAdded.join('; ')}` : null,
-    d.requirementsRemoved?.length ? `REMOVES: ${d.requirementsRemoved.join('; ')}` : null,
-    d.requirementsChanged?.length ? `changes: ${d.requirementsChanged.join('; ')}` : null,
-    d.textChanged?.length ? `text: ${d.textChanged.join(', ')}` : null,
-  ].filter(Boolean);
+  // Weakening changes first, in capitals, so they cannot be missed.
+  const diffLines = (d) => !d?.changes ? [] : [
+    ...d.weakening.map((w) => `WEAKENS: ${w}`),
+    ...d.changes.filter((c) => !d.weakening.includes(c)),
+    ...(d.newlyCaught?.length ? [`now also matches: ${d.newlyCaught.map((x) => `"${x}"`).join(', ')}`] : []),
+  ];
+  const ruleLines = (r) => !r ? [] : [
+    `Triggers: ${(r.triggers?.keywords || []).join(', ') || '(none)'}`,
+    ...((r.triggers?.contextual || []).map((g) => `Context: ${g.terms.join(', ')} with ${g.with.join(', ')}`)),
+    ...(r.triggers?.exclude?.length ? [`Ignores: ${r.triggers.exclude.join(', ')}`] : []),
+    `Requirements: ${(r.requirements || []).map((q) => `${q.label} (${q.type === 'approval' ? 'approval' : q.stage || 'build'})`).join('; ')}`,
+  ];
 
   return (
     <Stack space="space.300">
@@ -69,7 +77,7 @@ const App = () => {
       {error && <SectionMessage appearance="error"><Text>{error}</Text></SectionMessage>}
       {data.pendingReset && (
         <SectionMessage appearance="warning" title="A reset to small-team mode is pending">
-          <Text>Requested by an admin: {data.pendingReset.reason}. It takes effect {when(data.pendingReset.effectiveAt)} unless an approver cancels it.</Text>
+          <Text>Requested by an admin: {data.pendingReset.reason}. {data.pendingReset.confirmedBy ? 'A second Jira admin has confirmed it.' : 'It still needs a second Jira admin to confirm.'} It takes effect {when(data.pendingReset.effectiveAt)} unless an approver cancels it.</Text>
           {data.isApprover && <Inline><Button appearance="warning" isDisabled={busy} onClick={() => run('cancelReset', {})}>Cancel the reset</Button></Inline>}
         </SectionMessage>
       )}
@@ -85,8 +93,10 @@ const App = () => {
                 { key: 'r', content: <Stack space="space.025"><Text>{c.title}</Text><Tag text={c.clause} /></Stack> },
                 { key: 'c', content: <Stack space="space.025">
                   <Inline space="space.050"><Text><Strong>{c.kind}</Strong></Text>{c.diff?.weakens && <Lozenge appearance="removed">weakens the rule</Lozenge>}</Inline>
-                  {(diffText(c.diff) || []).map((line) => <Text key={line}>{line}</Text>)}
+                  {diffLines(c.diff).map((line) => <Text key={line}>{line}</Text>)}
                   {c.reason && <Text><Em>{c.reason}</Em></Text>}
+                  <Text><Strong>{c.kind === 'edit' ? 'Rule after this change:' : 'The rule:'}</Strong></Text>
+                  {ruleLines(c.kind === 'edit' ? c.diff?.after : c.rule).map((line) => <Text key={line}>{line}</Text>)}
                 </Stack> },
                 { key: 'b', content: <Stack space="space.025"><User accountId={c.by} /><Text>{when(c.at)}</Text></Stack> },
                 { key: 'a', content: <Inline space="space.050"><Button appearance="primary" isDisabled={busy} onClick={() => decide(c, 'apply')}>Apply</Button><Button isDisabled={busy} onClick={() => decide(c, 'reject')}>Reject</Button></Inline> },
@@ -95,11 +105,18 @@ const App = () => {
           />
         </Stack>
       )}
+      {data.bypassed?.length > 0 && (
+        <SectionMessage appearance="error" title={`Past a gate with the review open (${data.bypassed.length})`}>
+          <Text>These work items reached In Progress or Done while their privacy review was incomplete: moved from another project, changed work type, a workflow without the Preflight gate, or the review went stale afterwards.</Text>
+          {table(data.bypassed, '')}
+        </SectionMessage>
+      )}
       {!data.awaitingApproval.length && !data.waitingOnTeam.length ? (
-        <EmptyState header="Nothing waiting" description="No work item has an open privacy review." />
+        <EmptyState header={data.exceptions?.length || data.bypassed?.length ? 'Nothing else waiting' : 'Nothing waiting'} description="No other work item has an open privacy review." />
       ) : (
         <>
           <Heading size="medium">{`Waiting for approval (${data.awaitingApproval.length})`}</Heading>
+          <Text><Em>Open a work item to read the answers and approve it in its Preflight panel.</Em></Text>
           {table(data.awaitingApproval, 'No answers are waiting for sign-off.')}
           <Heading size="medium">{`Waiting on the team (${data.waitingOnTeam.length})`}</Heading>
           {table(data.waitingOnTeam, 'Nothing is waiting on the team.')}

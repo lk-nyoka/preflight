@@ -64,7 +64,8 @@ test('two stages: build needs answers + approval, done also needs ship-time evid
   assert.equal(empty.stages.done.open.length, 6); // + privacy notice link
 
   const fp = answersFingerprint(goodAnswers['popia-identifiers'], idRule[0]);
-  const approved = { answers: goodAnswers, approvals: { 'popia-identifiers': { by: 'io', at: 2000, fingerprint: fp } } };
+  const scope = empty.applicable[0].scope;
+  const approved = { answers: goodAnswers, approvals: { 'popia-identifiers': { by: 'io', at: 2000, fingerprint: fp, scope } } };
   const r = evaluate(work, idRule, approved);
   assert.equal(r.stages.build.status, 'clear');
   assert.equal(r.stages.done.status, 'blocked');
@@ -81,11 +82,12 @@ test('two stages: build needs answers + approval, done also needs ship-time evid
 test('approval goes stale when build answers or the rule change afterwards', () => {
   const work = { text: textOf(DEMO_ISSUES[0]) };
   const fp = answersFingerprint(goodAnswers['popia-identifiers'], idRule[0]);
-  const record = { answers: structuredClone(goodAnswers), approvals: { 'popia-identifiers': { by: 'a', at: 2000, fingerprint: fp } } };
+  const scope = evaluate(work, idRule, {}).applicable[0].scope;
+  const record = { answers: structuredClone(goodAnswers), approvals: { 'popia-identifiers': { by: 'a', at: 2000, fingerprint: fp, scope } } };
   record.answers['popia-identifiers'].retention.value = 'Kept forever for analytics purposes';
   assert.equal(evaluate(work, idRule, record).stages.build.status, 'blocked');
 
-  const fresh = { answers: goodAnswers, approvals: { 'popia-identifiers': { by: 'a', at: 2000, fingerprint: fp } } };
+  const fresh = { answers: goodAnswers, approvals: { 'popia-identifiers': { by: 'a', at: 2000, fingerprint: fp, scope } } };
   const changed = evaluate(work, idRule.map((r) => ({ ...r, updatedAt: 3000 })), fresh);
   assert.match(changed.stages.build.open[0].reason, /rule changed/);
 });

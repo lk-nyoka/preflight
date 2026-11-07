@@ -1,27 +1,38 @@
-# Preflight: 3-minute demo video script
+# Preflight: demo video script (2:45)
 
-Judges are not required to watch past 3:00, so everything that wins is inside it. Record on a real Jira site,
-one take per scene, no slides before 2:50. Target length: 3:30 (the last 30 s are optional depth).
+Judges are not required to watch past 3:00, so the whole story fits inside it. The film in `video/` follows this
+script. Its app scenes are animated recreations; before submitting, record each one on a real Jira site and drop the
+clip into `video/recordings/<scene>.mp4` (same name as the scene). `python3 build.py` swaps it in and keeps the music,
+narration and captions. Record each clip at the scene's length (see `video/build/timeline.json`).
 
-**Setup before recording:** demo loaded in project `PRIV`; both gates attached; one named approver ("Thandi,
-Information Officer") in a second browser profile; a Confluence page "Acme Privacy Policy" with a section on
-location data; `PRIV-1` "Add SA ID number field to customer signup" in To Do.
+The structure: **the disaster, told backwards → why it keeps happening → rewind → the rescue → the payoff.**
 
-| Time | On screen | Voice-over (keep it this short) |
-|---|---|---|
-| 0:00–0:12 | `PRIV-1` on the board | "This ticket adds a South African ID number to our signup form. Nobody has asked why we need it, how long we keep it, or whether privacy signed off. Watch what happens when a developer starts work." |
-| 0:12–0:30 | Drag `PRIV-1` to **In Progress** → Jira refuses with the Preflight message | "Preflight holds it *before* a line of code is written. The message names the rule, the POPIA section and exactly what's missing." |
-| 0:30–0:50 | Open the issue → Preflight panel: "Start work: Blocked", next-step box, four questions, approver shown | "The panel says what to do next and who approves: Thandi, our Information Officer. Every rule cites why it matched: the phrase 'SA ID number'." |
-| 0:50–1:15 | Rovo → Preflight agent: "Help me answer these" → agent drafts → panel shows **Rovo draft** → **Use draft** → **Save answers** | "Rovo drafts the answers with me, but a draft never counts. I confirm it. AI helps; it can't approve, and it can't say 'no personal data' for me." |
-| 1:15–1:35 | Switch to Thandi → **Apps → Preflight reviews** → item under "Waiting for approval" → Approve | "Thandi sees everything waiting on her in one inbox, and approves." |
-| 1:35–1:45 | Back as developer → drag to In Progress → succeeds | "Now work can start." |
-| 1:45–2:05 | Edit the description to delete "ID number" → panel still shows the rule ("matched earlier") · change the retention answer → approval goes stale | "Rewording the ticket doesn't make the review disappear. And if anyone changes an approved answer, the approval goes stale and the gate closes again." |
-| 2:05–2:20 | Drag to **Done** → held: "Privacy notice updated (link)" → paste link → Done succeeds | "Before Done, the second gate asks for proof it shipped as agreed: the updated privacy notice." |
-| 2:20–2:45 | Admin page → Rovo "Draft Preflight rules from our privacy policy page" → new draft appears with examples passing → **Check workflow coverage** → one unprotected Bug workflow | "Rules come from your own policy. Rovo turns a Confluence page into draft rules; nothing is enforced until an approver activates it. And Preflight shows you any workflow that can still skip the gate." |
-| 2:45–3:00 | Title card: "Preflight: your privacy policy, enforced before build." | "Scanners find personal data after it's in Jira. Checklists hope someone ticks the box. Preflight puts your privacy review in front of the work and keeps a write-once record of every decision." |
-| 3:00–3:30 *(optional)* | Architecture slide: deterministic engine shared by both gates, panel, Rovo and MCP; write-once audit; named-approver governance | "No LLM in the gate. The same engine powers both gates, the panel, Rovo and the MCP tools. Every answer, approval and rule change is a write-once audit event." |
+| Scene | Time | On screen | Narration |
+|---|---|---|---|
+| `cold` | 0:00 | Dark. A complaint letter to a fictional company: ID numbers collected with no purpose, kept forever, shared with a vendor. "Provide the records showing who approved this." | "Eight months after launch, a complaint arrives…" |
+| `who` | 0:12 | Chat messages: "Who approved storing customer ID numbers?" "Not sure." … then **Who approved this?** | "The first question is always the same…" |
+| `trace` | 0:20 | The old ticket: created Tuesday, In Progress Tuesday, Done Thursday. **Privacy questions asked: 0** | "Because the decision was made here, in a Jira ticket…" |
+| `stakes` | 0:32 | R1 million · R500,000 · 10 years, with the source line | "And South Africa's Information Regulator is fining…" |
+| `why` | 0:45 | 400 tickets a sprint. 1 Information Officer. Review after the code ships. | "It keeps happening because…" |
+| `rewind` | 0:56 | Tape rewinds to Tuesday 09:12, then **Preflight** | "So, rewind. Same ticket. Same Tuesday…" |
+| `blocked` | 1:04 | **Record:** drag `PRIV-1` to In Progress; Jira refuses with the Preflight message (names the approver) | "The moment someone starts work, Preflight holds the ticket…" |
+| `panel` | 1:14 | **Record:** the Preflight panel: next step, four questions, why it matched | "Four questions: the purpose…" |
+| `rovo` | 1:23 | **Record:** Rovo drafts an answer → *Rovo draft* in the panel → Use draft → Save | "Rovo can draft the answers. But a draft never counts…" |
+| `inbox` | 1:36 | **Record:** as Thandi, *Apps → Preflight reviews* → open the item → **Approve** in its panel | "The Information Officer sees it in one inbox…" |
+| `pass` | 1:47 | **Record:** drag to In Progress: it moves | "Now, work can start." |
+| `dodge` | 1:52 | **Record:** reword the summary AND description (remove "SA ID number") → panel shows "matched earlier"; then change the retention answer → approval goes stale | "Reword the ticket, and it's still caught…" |
+| `done` | 2:04 | **Record:** drag to Done → refused → add the privacy notice link → Done | "Before Done, a second gate asks for proof…" |
+| `policy` | 2:14 | **Record:** Rovo drafts a rule from a Confluence policy page; *Check workflow coverage* shows one unprotected workflow | "The rules come from your own policy…" |
+| `payoff` | 2:26 | The same complaint beside the Preflight record: who approved, when, purpose, basis, retention, notice link, history | "Eight months later, someone asks the same question…" |
+| `end` | 2:39 | **Preflight. Privacy review, before you build.** | "Preflight. Privacy review, before you build." |
 
-**Do not show:** JQL, separation of duties, exceptions, settings screens. They're real, but they cost seconds.
+**Setup before recording:** demo loaded in project `PRIV`; both gates attached; one named approver ("Thandi M.,
+Information Officer") in a second browser profile; a Confluence page "Acme Privacy Policy" with a section on location
+data; `PRIV-1` "Add SA ID number field to customer signup" in To Do.
 
-**Say "POPIA" once, then say "your privacy policy".** Non-South-African judges must see it as a pattern for any
-policy (GDPR, HIPAA), with POPIA as the first rule pack.
+**Facts on screen** (checked 7 November 2026): the R1 million and R500,000 fines were announced by the Information
+Regulator on 26 October 2026 (reported by ITWeb and Accounting Weekly); POPIA allows imprisonment of up to 10 years
+for serious offences. The complaint letter and Acme Retail are fictional and labelled as such.
+
+**Say "POPIA" sparingly, then "your privacy policy".** Non-South-African judges should see a pattern for any policy
+(GDPR, HIPAA), with POPIA as the first rule pack.

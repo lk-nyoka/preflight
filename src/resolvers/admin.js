@@ -10,7 +10,7 @@ import { evaluate } from '../engine/evaluate.js';
 import { getRules, getSettings, getGates, appendAudit, listAudit } from '../store.js';
 import {
   saveRuleChange, setRuleStatusChange, deleteRuleChange, setApprovers, requestReset, setPolicy, pendingRuleChanges,
-  withdrawProposal, applyDueReset, requireApproverForBulk, replacePack,
+  withdrawProposal, applyDueReset, requireApproverForBulk, replacePack, confirmReset,
 } from '../governance.js';
 import { currentUserIsJiraAdmin, getCreatableIssueTypes, createIssue, getWorkflowCoverage } from '../jira.js';
 import { POPIA_RULES, POPIA_PACK_ID, DEMO_ISSUES } from '../rulepacks/popia.js';
@@ -92,7 +92,6 @@ define('testText', async (req) => {
 define('resetPack', async (req) => {
   await requireApproverForBulk(req.context.accountId);
   await replacePack(POPIA_RULES, POPIA_PACK_ID, 'draft', req.context.accountId);
-  await audit(req, 'Restored the POPIA starter pack as drafts');
   return adminState(req, { notice: 'POPIA starter pack restored as drafts.' });
 });
 
@@ -130,7 +129,12 @@ define('saveSettings', async (req) => {
 
 define('requestReset', async (req) => {
   await requestReset(req.context.accountId, req.payload.reason);
-  return adminState(req, { notice: 'Reset requested. It takes effect in 72 hours unless an approver cancels it, and you cannot name yourself approver afterwards.' });
+  return adminState(req, { notice: 'Reset requested. Another Jira admin must confirm it. It takes effect 72 hours after your request unless an approver cancels it, and for 30 days afterwards you cannot approve, weaken a control or name the new approvers.' });
+});
+
+define('confirmReset', async (req) => {
+  await confirmReset(req.context.accountId);
+  return adminState(req, { notice: 'Reset confirmed. It takes effect 72 hours after it was requested unless an approver cancels it.' });
 });
 
 define('withdrawProposal', async (req) => {

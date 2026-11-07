@@ -55,8 +55,9 @@ resolver.define('getInbox', async (req) => {
       approvers: settings.approverAccountIds,
       ruleChanges: isApprover ? await pendingRuleChanges() : [],
       awaitingApproval: items.filter((i) => i.awaitingApproval),
-      waitingOnTeam: items.filter((i) => !i.awaitingApproval && !i.exception),
+      waitingOnTeam: items.filter((i) => !i.awaitingApproval && !i.exception && !i.bypassed),
       exceptions: items.filter((i) => i.exception),
+      bypassed: items.filter((i) => i.bypassed),
     };
   } catch (error) {
     console.error('inbox.getInbox', error);
@@ -75,6 +76,12 @@ resolver.define('decideRuleChange', async (req) => {
 });
 
 /** Approvers manage the approver list and policy here, so a non-admin Information Officer is not locked out. */
+/** The inbox is open to every Jira user, so these require a named approver before anything else runs. */
+async function requireNamedApprover(accountId) {
+  const settings = await getSettings();
+  if (!settings.approverAccountIds.includes(accountId)) throw new Error('Only a named Preflight approver can change this here. Jira admins use Jira settings > Apps > Preflight.');
+}
+
 for (const [name, fn] of Object.entries({
   setApprovers: (req) => setApprovers(req.payload.approverAccountIds, req.context.accountId),
   setPolicy: (req) => setPolicy(req.payload, req.context.accountId),
@@ -82,6 +89,7 @@ for (const [name, fn] of Object.entries({
 })) {
   resolver.define(name, async (req) => {
     try {
+      await requireNamedApprover(req.context.accountId);
       await fn(req);
       return { ok: true };
     } catch (error) {

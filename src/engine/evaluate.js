@@ -27,7 +27,7 @@ export const STAGES = ['build', 'done'];
 export const GLOBAL_EXCLUDES = [
   'race condition', 'race conditions', 'child issue', 'child issues', 'child page', 'child pages',
   'child process', 'child component', 'parent child', 'minor version', 'minor release', 'minor bug',
-  'health check', 'health checks', 'healthcheck', 'health endpoint', 'promo code', 'promo codes',
+  'health check endpoint', 'health check endpoints', 'healthcheck', 'health endpoint', 'kubernetes health check', 'promo code', 'promo codes',
   'passport style', 'campaign dashboard', 'session id', 'request id', 'trace id', 'correlation id',
   'transaction id', 'build number', 'version number', 'order number', 'invoice number', 'ticket number',
   'issue number', 'line number', 'port number', 'phone mockup', 'phone layout',
@@ -70,9 +70,11 @@ function stripPhrases(haystack, phrases) {
 /** Which of `phrases` occur (stem-aware, whole words) in an already-normalised haystack. */
 function hitsIn(haystack, phrases) {
   const hits = [];
+  const seen = new Set();
   for (const raw of phrases || []) {
     const needle = normalise(raw);
-    if (needle.trim() && haystack.includes(needle)) hits.push(raw);
+    // "patient" and "patients" normalise the same; report the phrase once.
+    if (needle.trim() && !seen.has(needle) && haystack.includes(needle)) { hits.push(raw); seen.add(needle); }
   }
   return hits;
 }
@@ -154,17 +156,37 @@ function isUrl(value) {
   }
 }
 
-/** Reject filler such as "aaaaaaaaaa", "n/a", "tbc", "see above". */
+/** Words and phrases that mean "no real answer yet", wherever they appear. */
+const NOT_AN_ANSWER = /\b(tbd|tbc|todo|to be (decided|confirmed|determined)|not sure|unsure|no idea|don ?t know|dunno|(this|it|that) later|figure (it|this) out|decide later|later on|asap|placeholder|lorem ipsum|test(ing)? answer|quick brown fox|see above|same as above|n\/a)\b/i;
+/** Keyboard rows and runs typed to get past a word count. */
+const MASH = /^(asdf\w*|qwer\w*|zxcv\w*|uiop|hjkl|sdfg|wert|xcvb|dfgh|ghjk|fghj|yuio|tyui|vbnm|cvbn|azerty|abcd\w*|(\w)\2{2,}|blah|bla|lol|test|foo|bar|baz|xyz)$/i;
+
+/**
+ * Reject filler: placeholders anywhere in the text ("tbd", "not sure", "later"),
+ * keyboard mash, repeated words, and answers that skip the one thing the question
+ * asks for (requirement.mustMention: e.g. a retention answer must mention a time
+ * or an event that ends it).
+ */
 export function answerQuality(value, requirement = {}) {
   const text = String(value || '').trim();
   const minWords = requirement.minWords ?? 4;
   const words = text.split(/\s+/).filter((w) => /[a-z0-9]/i.test(w));
-  if (/^(n\/?a|na|none|tbc|tbd|todo|later|see above|same as above|-+|\.+)$/i.test(text)) {
-    return 'Give a real answer, not a placeholder';
+  const lower = words.map((w) => w.toLowerCase().replace(/[^a-z0-9]/g, ''));
+  if (/^(n\/?a|na|none|nothing|later|-+|\.+)$/i.test(text) || NOT_AN_ANSWER.test(text)) {
+    return 'Give a real answer: placeholders like "TBD", "not sure" or "later" do not count';
   }
   if (new Set(text.toLowerCase().replace(/[^a-z]/g, '')).size < 5) return 'Give a real answer, not filler text';
   if (words.length < minWords) return `Needs at least ${minWords} words`;
-  if (new Set(words.map((w) => w.toLowerCase())).size < Math.min(3, minWords)) return 'Give a real answer, not repeated words';
+  if (new Set(lower).size < Math.min(3, minWords)) return 'Give a real answer, not repeated words';
+  const mashed = lower.filter((w) => MASH.test(w) || (w.length >= 4 && !/[aeiouy]/.test(w) && !/\d/.test(w)));
+  if (mashed.length >= Math.max(2, Math.ceil(words.length / 3))) return 'Give a real answer, not keyboard filler';
+  const must = requirement.mustMention || [];
+  if (must.length) {
+    const hay = normalise(text);
+    if (!must.some((m) => (m.startsWith('/') ? new RegExp(m.slice(1, -1), 'i').test(text) : hay.includes(normalise(m))))) {
+      return requirement.mustMentionHint || `Mention ${must.slice(0, 4).join(', ')}…`;
+    }
+  }
   return null;
 }
 
@@ -174,7 +196,8 @@ function evaluateRequirement(rule, requirement, record, scope = []) {
     const approval = record.approvals?.[rule.id];
     if (!approval) return { satisfied: false, reason: 'Waiting for an approver' };
     // Scope growth: the ticket now mentions something the approver did not see.
-    const grown = approval.scope ? scope.filter((p) => !approval.scope.includes(p)) : [];
+    // Approvals without a recorded scope covered nothing in particular, so any phrase counts as new.
+    const grown = scope.filter((p) => !(approval.scope || []).includes(p));
     if (grown.length) return { satisfied: false, reason: `The work item now also mentions "${grown.join('", "')}"; re-approval needed` };
     if (rule.updatedAt && approval.at && rule.updatedAt > approval.at) {
       return { satisfied: false, reason: 'The rule changed after this was approved; re-approval needed' };
@@ -280,7 +303,15 @@ export function evaluate(workItem, rules = [], record = {}, opts = {}) {
   const exceptionActive = Boolean(record.exception) && (!record.exception.expiresAt || record.exception.expiresAt > now);
   const exceptionExpired = Boolean(record.exception) && !exceptionActive;
   // An exception waives only the rules it was granted for (older records without a list waive nothing new).
-  const waived = new Set(exceptionActive ? record.exception.ruleIds || [] : []);
+  // It also covers only the phrases each rule matched when it was granted: new wording re-opens that rule.
+  const waived = new Set();
+  if (exceptionActive) {
+    for (const id of record.exception.ruleIds || []) {
+      const pinned = record.exception.scopes?.[id];
+      const match = applicable.find((m) => m.ruleId === id);
+      if (!pinned || !match || match.scope.every((p) => pinned.includes(p))) waived.add(id);
+    }
+  }
   const needsDeclaration = Boolean(opts.requireDeclaration) && !declaration && !applicable.length;
   // "Yes"/"Unsure" with no active declaration rule must not silently pass.
   const declarationRuleMissing = (declaration === 'yes' || declaration === 'unsure') && !opts.declarationRuleId && !applicable.length;

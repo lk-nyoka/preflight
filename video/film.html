@@ -54,26 +54,83 @@
   .chip { position: absolute; padding: 14px 24px; border-radius: 999px; background: #fff; box-shadow: var(--shadow); font-size: 26px; font-weight: 600; }
   .mark { background: #fff2a8; border-radius: 4px; padding: 0 3px; }
   .caret { display: inline-block; width: 2px; height: 1.05em; background: var(--blue); vertical-align: -0.15em; }
+  .dark { background: #050507; color: #f5f5f7; }
+  .eyebrow { font-size: 22px; letter-spacing: .22em; font-weight: 700; color: #ff6b6e; }
+  .letter { position: absolute; width: 800px; background: #fbfaf7; color: #1d1d1f; border-radius: 6px; padding: 46px 52px; font-size: 24px; line-height: 1.55;
+    box-shadow: 0 60px 120px rgba(0,0,0,.6); font-family: 'Inter', sans-serif; }
+  .letter.small { width: 560px; font-size: 20px; padding: 34px 38px; transform: rotate(-2deg); }
+  .lline { margin-top: 6px; }
+  .msg { position: absolute; width: 760px; background: #1c1c1f; border: 1px solid #2c2c30; border-radius: 18px; padding: 18px 24px; font-size: 26px; color: #f5f5f7; }
+  .msg .who { display: block; font-size: 16px; color: #8a8a8e; font-weight: 600; margin-bottom: 4px; letter-spacing: .02em; }
+  .dark-card { background: #1c1c1f; border-color: #2c2c30; color: #f5f5f7; }
+  .tl { position: absolute; left: 560px; font-size: 30px; color: #d2d2d7; display: flex; align-items: center; gap: 18px; }
+  .tl-dot { width: 14px; height: 14px; border-radius: 50%; background: #6e6e73; display: inline-block; }
+  .stat { position: absolute; top: 330px; width: 460px; text-align: center; }
+  .stat .num { font-size: 92px; font-weight: 700; letter-spacing: -.04em; color: #fff; }
+  .stat .cap { margin-top: 18px; font-size: 24px; color: #a1a1a6; line-height: 1.4; }
+  .rw-lines { position: absolute; inset: 0; background: repeating-linear-gradient(0deg, rgba(255,255,255,.05) 0 2px, transparent 2px 6px); opacity: 0; }
+  .rec { display: grid; grid-template-columns: 200px 1fr; gap: 20px; padding: 16px 0; border-bottom: 1px solid var(--line); margin-top: 6px; }
+  .rec span { color: var(--muted); font-size: 18px; font-weight: 600; padding-top: 3px; }
+  .rec b { font-weight: 600; display: flex; align-items: center; gap: 10px; }
 </style>
 </head>
 <body>
 
-<!-- 1. HOOK -->
-<section class="scene center" id="hook">
-  <div class="mid" id="hook-l1">This is a ticket.</div>
-  <div class="issuecard" id="hook-card" style="position:absolute; width:620px; left:650px; top:430px;">
-    Add SA ID number field to customer signup
-    <div class="key"><span class="loz grey">To do</span> PRIV-1 <span style="flex:1"></span><span class="avatar">DV</span></div>
+<!-- DARK OPENING: the disaster, told backwards -->
+<section class="scene dark" id="cold">
+  <div class="eyebrow" id="cold-eye" style="position:absolute; left:0; right:0; top:120px; text-align:center;">EIGHT MONTHS AFTER LAUNCH</div>
+  <div class="letter" id="cold-letter" style="left:560px; top:210px;">
+    <div style="font-size:15px; letter-spacing:.14em; color:#8a8a8e; font-weight:700;">COMPLAINT UNDER THE PROTECTION OF PERSONAL INFORMATION ACT</div>
+    <div style="font-size:30px; font-weight:650; margin-top:16px; letter-spacing:-.01em;">Re: Acme Retail (Pty) Ltd</div>
+    <div style="margin-top:20px;">A customer has complained that their identity number was:</div>
+    <div class="lline" id="cl-a">· collected with no stated purpose</div>
+    <div class="lline" id="cl-b">· kept with no retention limit</div>
+    <div class="lline" id="cl-c">· shared with a third-party vendor</div>
+    <div style="margin-top:22px;" id="cl-d"><span id="cl-dm">Provide the records showing <b>who approved this processing</b>, and why.</span></div>
+    <div style="margin-top:26px; font-size:15px; color:#8a8a8e;">Illustrative example. Acme Retail is fictional.</div>
   </div>
-  <div class="sub" id="hook-q1" style="position:absolute; left:250px; top:700px;">Why is it needed?</div>
-  <div class="sub" id="hook-q2" style="position:absolute; left:770px; top:760px;">How long is it kept?</div>
-  <div class="sub" id="hook-q3" style="position:absolute; left:1270px; top:700px;">Did privacy sign off?</div>
 </section>
 
-<!-- 2. TITLE -->
-<section class="scene center" id="title">
-  <div class="big grad" id="title-word" style="font-size:150px;">Preflight</div>
-  <div class="sub" id="title-sub" style="margin-top:26px; font-size:38px;">Your privacy policy, enforced before build.</div>
+<section class="scene dark" id="who">
+  <div class="msg" id="w1" style="left:560px; top:180px;"><span class="who">Legal · 09:14</span>Who approved storing customer ID numbers?</div>
+  <div class="msg" id="w2" style="left:620px; top:300px;"><span class="who">Engineering lead · 09:16</span>Not sure. Product?</div>
+  <div class="msg" id="w3" style="left:680px; top:420px;"><span class="who">Product · 09:21</span>I think it was in a ticket somewhere…</div>
+  <div class="msg" id="w4" style="left:620px; top:540px;"><span class="who">Engineering lead · 09:40</span>Found the ticket. No sign-off anywhere.</div>
+  <div class="big" id="w-big" style="position:absolute; left:0; right:0; top:760px; color:#fff;">Who approved this?</div>
+</section>
+
+<section class="scene dark" id="trace">
+  <div class="issuecard dark-card" id="t-card" style="position:absolute; width:900px; left:510px; top:200px; font-size:30px;">
+    Add SA ID number field to customer signup
+    <div class="key" style="font-size:18px;"><span class="loz green">Done</span> PRIV-1 <span style="flex:1"></span><span class="avatar">DV</span></div>
+  </div>
+  <div class="tl" id="t1" style="top:430px;"><span class="tl-dot"></span><b>Tuesday 09:12</b>&nbsp; Created</div>
+  <div class="tl" id="t2" style="top:500px;"><span class="tl-dot"></span><b>Tuesday 10:03</b>&nbsp; In Progress</div>
+  <div class="tl" id="t3" style="top:570px;"><span class="tl-dot"></span><b>Thursday 16:47</b>&nbsp; Done</div>
+  <div class="tl" id="t4" style="top:680px; color:#ff6b6e;"><span class="tl-dot" style="background:#ff6b6e"></span><b>Privacy questions asked: 0</b></div>
+</section>
+
+<section class="scene dark" id="stakes">
+  <div class="eyebrow" id="s-eye" style="position:absolute; left:0; right:0; top:130px; text-align:center;">THE REGULATOR IS FINING</div>
+  <div class="stat" id="s1" style="left:200px;"><div class="num">R1 million</div><div class="cap">a major bank<br>October 2026</div></div>
+  <div class="stat" id="s2" style="left:730px;"><div class="num">R500,000</div><div class="cap">a college that shared personal information without a lawful reason · October 2026</div></div>
+  <div class="stat" id="s3" style="left:1260px;"><div class="num">10 years</div><div class="cap">maximum prison term for serious POPIA offences</div></div>
+  <div class="sub" id="s-src" style="position:absolute; left:0; right:0; top:880px; font-size:20px; color:#8a8a8e;">Source: Information Regulator infringement notices announced 26 October 2026; POPIA Chapter 11</div>
+</section>
+
+<section class="scene dark" id="why">
+  <div class="mid" id="y1" style="position:absolute; left:0; right:0; top:250px; color:#fff;">400 tickets a sprint.</div>
+  <div class="mid" id="y2" style="position:absolute; left:0; right:0; top:350px; color:#fff;">1 Information Officer.</div>
+  <div class="mid" id="y3" style="position:absolute; left:0; right:0; top:450px; color:#fff;">Review after the code ships.</div>
+  <div class="sub" id="y4" style="position:absolute; left:0; right:0; top:620px; color:#a1a1a6;">The evidence lives in chat threads, email and memory.</div>
+</section>
+
+<section class="scene dark" id="rewind">
+  <div class="rw-lines" id="rw-lines"></div>
+  <div class="big" id="rw-sym" style="position:absolute; left:0; right:0; top:330px; color:#fff; font-size:150px;">◀◀</div>
+  <div class="mid" id="rw-time" style="position:absolute; left:0; right:0; top:560px; color:#fff; font-variant-numeric: tabular-nums;">8 months earlier</div>
+  <div class="big grad" id="rw-word" style="position:absolute; left:0; right:0; top:380px; font-size:150px;">Preflight</div>
+  <div class="sub" id="rw-sub" style="position:absolute; left:0; right:0; top:580px; font-size:38px; color:#d2d2d7;">Same ticket. Same Tuesday. This time, with Preflight.</div>
 </section>
 
 <!-- 3. BLOCKED (board) -->
@@ -83,14 +140,14 @@
     <div class="col" style="left:40px;"><h4>TO DO</h4></div>
     <div class="col" style="left:605px;"><h4>IN PROGRESS</h4></div>
     <div class="col" style="left:1170px;"><h4>DONE</h4></div>
-    <div class="issuecard" id="b-other1" style="position:absolute; width:430px; left:60px; top:330px;">Update footer copyright year<div class="key"><span class="loz grey">To do</span> PRIV-5</div></div>
+    <div class="issuecard" id="b-other1" style="position:absolute; width:430px; left:60px; top:370px;">Update footer copyright year<div class="key"><span class="loz grey">To do</span> PRIV-5</div></div>
     <div class="issuecard" id="b-other2" style="position:absolute; width:430px; left:625px; top:190px;">Fix the campaign dashboard filter<div class="key"><span class="loz blue">In progress</span> PRIV-14</div></div>
     <div class="issuecard" id="b-card" style="position:absolute; width:430px; left:60px; top:190px; z-index:5;">Add SA ID number field to customer signup<div class="key"><span class="loz grey" id="b-card-loz">To do</span> PRIV-1</div></div>
   </div>
   <div class="flag" id="b-flag" style="left:1180px; top:120px;">
     <b>Preflight: privacy review needed before work starts</b>
-    Identifying numbers <span class="tag">POPIA s1, s10, s11, s13, s14, s18</span><br>
-    Specific purpose · Why less data will not do · Lawful basis · Retention period · Information Officer approval
+    Identifying numbers <span class="tag">POPIA s1, s10, s11, s13, s14, s18</span>: 4 questions + approval.<br>
+    Approver: <b style="display:inline; font-size:20px;">Thandi M.</b> Open the Preflight panel on PRIV-1 to see what to do next.
   </div>
 </section>
 
@@ -111,7 +168,7 @@
         <span style="font-size:16px; color:var(--muted); font-weight:600;">Close</span><span class="loz red" id="p-close">Blocked</span></h3>
       <div class="box warn" id="p-next">
         <b id="p-next-title">Next: answer 4 questions before work starts</b><br>
-        <span style="display:inline-flex; align-items:center; gap:10px; margin-top:6px;">Then approved by <span class="avatar io">TM</span> Thandi M., Information Officer</span>
+        <span id="p-next-sub" style="display:inline-flex; align-items:center; gap:10px; margin-top:6px;">Then approved by <span class="avatar io">TM</span> Thandi M., Information Officer</span>
       </div>
       <div class="rule">
         <div style="display:flex; align-items:center; gap:12px;"><b style="font-size:22px;">Identifying numbers</b><span class="tag">POPIA s1, s10, s11, s13, s14, s18</span></div>
@@ -138,15 +195,15 @@
   </div>
   <div class="ring" id="p-ring"></div>
   <!-- Rovo sheet -->
-  <div class="window" id="rovo" style="left:1240px; top:130px; width:560px; height:820px; background:#fbfaff;">
+  <div class="window" id="rovo" style="left:150px; top:150px; width:760px; height:800px; background:#fbfaff;">
     <div class="chrome" style="color:var(--purple); font-weight:700;">✦ Rovo · Preflight agent</div>
     <div class="bubble me" id="r-q" style="right:26px; top:90px;">Help me answer these</div>
     <div class="bubble ai" id="r-typing" style="left:26px; top:180px; color:var(--muted)">• • •</div>
     <div class="bubble ai" id="r-a" style="left:26px; top:180px;">Here’s a draft for <b>Specific purpose</b>:<br>“Verify callers against FICA records before account changes.”<br><br><span style="color:var(--purple)">Saved as a draft. Confirm it in the Preflight panel; drafts don’t count until you do.</span></div>
   </div>
-  <div class="chip" id="c1" style="left:330px; top:930px;">AI drafts</div>
-  <div class="chip" id="c2" style="left:640px; top:930px;">You confirm</div>
-  <div class="chip" id="c3" style="left:980px; top:930px;">Only humans approve</div>
+  <div class="chip" id="c1" style="left:560px; top:1000px;">AI drafts</div>
+  <div class="chip" id="c2" style="left:790px; top:1000px;">You confirm</div>
+  <div class="chip" id="c3" style="left:1050px; top:1000px;">Only humans approve</div>
 </section>
 
 <!-- 6. INBOX -->
@@ -194,18 +251,30 @@
   </div>
 </section>
 
-<!-- 11. CLOSE -->
-<section class="scene center" id="close">
-  <div class="mid" id="cl-1" style="position:absolute; top:330px; color:var(--muted)">Scanners find personal data<br>after it’s already in Jira.</div>
-  <div class="mid" id="cl-2" style="position:absolute; top:330px; color:var(--muted)">Checklists hope someone<br>ticks the box.</div>
-  <div class="big" id="cl-3" style="position:absolute; top:300px;">Preflight reviews it<br><span class="grad">before you build.</span></div>
-  <div class="sub" id="cl-4" style="position:absolute; top:620px;">With a write-once record of every decision.</div>
+<!-- PAYOFF: the same question, answered -->
+<section class="scene" id="payoff">
+  <div class="letter small" id="po-letter" style="left:120px; top:250px;">
+    <div style="font-size:13px; letter-spacing:.14em; color:#8a8a8e; font-weight:700;">COMPLAINT UNDER POPIA</div>
+    <div style="font-size:24px; font-weight:650; margin-top:12px;">Re: Acme Retail (Pty) Ltd</div>
+    <div style="margin-top:16px;">Provide the records showing <b>who approved this processing</b>, and why.</div>
+  </div>
+  <div class="window" id="po-rec" style="left:760px; top:200px; width:1040px; height:640px; padding:34px 40px; font-size:22px; line-height:1.55;">
+    <div style="display:flex; align-items:center; gap:14px;"><b style="font-size:30px; letter-spacing:-.01em;">Preflight record · PRIV-1</b><span class="loz green">Complete</span></div>
+    <div style="color:var(--muted); margin-top:4px;">Identifying numbers · POPIA s1, s10, s11, s13, s14, s18</div>
+    <div class="rec" id="r1"><span>Approved by</span><b><span class="avatar io">TM</span> Thandi M., Information Officer · Tue 09:41</b></div>
+    <div class="rec" id="r2"><span>Purpose</span><b>Verify callers against FICA records before account changes</b></div>
+    <div class="rec" id="r3"><span>Lawful basis</span><b>Required to comply with an obligation imposed by law</b></div>
+    <div class="rec" id="r4"><span>Retention</span><b>Deleted five years after account closure, as FICA requires</b></div>
+    <div class="rec" id="r5"><span>Privacy notice</span><b style="color:var(--blue)">acme.example/privacy-notice#id-numbers</b></div>
+    <div class="rec" id="r6"><span>History</span><b>14 events · write-once</b></div>
+  </div>
+  <div class="chip" id="po-clock" style="left:150px; top:700px;">⏱ 0:10</div>
 </section>
 
 <!-- 12. END -->
 <section class="scene center" id="end">
   <div class="big grad" id="end-word" style="font-size:140px;">Preflight</div>
-  <div class="sub" style="margin-top:22px; font-size:36px;">Your privacy policy, enforced before build.</div>
+  <div class="sub" style="margin-top:22px; font-size:36px;">Privacy review, before you build.</div>
   <div class="sub" style="margin-top:70px; font-size:24px;">Built on Atlassian Forge · Jira · Rovo &nbsp;·&nbsp; Codegeist 2026</div>
   <div class="sub" style="margin-top:14px; font-size:18px;">Preflight records your organisation’s review. It is not legal advice.</div>
 </section>
@@ -253,35 +322,69 @@ function type(el, text, t, a, b) {
 function press(el, t, at) { const k = 1 - 0.06 * Math.sin(Math.PI * seg(t, at, at + 0.25)); el.style.transform = `scale(${k})`; }
 
 const CUES = {
+  cold: [['drop', 0.6], ['tick', 3.6], ['tick', 4.8], ['tick', 6.0], ['hit', 8.4]],
+  who: [['msg', 0.5], ['msg', 1.9], ['msg', 3.3], ['msg', 4.7], ['hit', 6.2]],
+  trace: [['pop', 0.5], ['tick', 3.6], ['tick', 4.4], ['tick', 5.8], ['hit', 7.6]],
+  stakes: [['hit', 3.5], ['hit', 5.9], ['hit', 9.7]],
+  why: [['tick', 0.6], ['tick', 2.6], ['tick', 4.6], ['pop', 7.2]],
+  rewind: [['rewind', 0.2], ['swell', 3.6], ['chime', 4.6]],
   blocked: [['click', 1.0], ['whoosh', 1.5], ['deny', 2.9], ['pop', 3.3]],
-  panel: [['pop', 0.4], ['tick', 2.0], ['tick', 6.5]],
+  panel: [['pop', 0.4], ['tick', 2.0], ['tick', 5.5]],
   rovo: [['whoosh', 0.2], ['pop', 1.0], ['pop', 3.4], ['pop', 5.0], ['click', 7.0], ['click', 9.0], ['chime', 9.3], ['pop', 11.0], ['pop', 11.8], ['pop', 12.6]],
   inbox: [['whoosh', 0.2], ['click', 2.2], ['click', 7.2], ['chime', 7.5]],
   pass: [['click', 0.6], ['whoosh', 1.1], ['success', 2.2]],
   dodge: [['type', 1.2, 2.6], ['pop', 4.6], ['type', 7.4, 1.6], ['deny', 9.6]],
   done: [['click', 0.6], ['whoosh', 1.1], ['deny', 2.3], ['type', 4.8, 1.6], ['click', 7.2], ['success', 9.2]],
-  policy: [['pop', 0.8], ['pop', 3.0], ['whoosh', 5.0], ['pop', 9.0], ['deny', 12.0]],
-  close: [['swell', 0.0], ['swell', 4.2], ['swell', 8.6]],
+  policy: [['pop', 0.8], ['pop', 3.0], ['whoosh', 4.4], ['pop', 6.6], ['deny', 8.6]],
+  payoff: [['pop', 0.6], ['pop', 4.6], ['tick', 5.0], ['tick', 5.4], ['tick', 5.8], ['tick', 6.2], ['tick', 6.6], ['tick', 7.0], ['success', 7.8]],
   end: [['chime', 0.5]],
-  title: [['swell', 0.0]],
-  hook: [['pop', 1.6], ['tick', 4.8], ['tick', 6.0], ['tick', 7.2]],
 };
 
-const SCENE_EL = { hook: 'hook', title: 'title', blocked: 'blocked', panel: 'issue', rovo: 'issue', inbox: 'inbox', pass: 'blocked',
-  dodge: 'issue', done: 'issue', policy: 'policy', close: 'close', end: 'end' };
+const SCENE_EL = { cold: 'cold', who: 'who', trace: 'trace', stakes: 'stakes', why: 'why', rewind: 'rewind', blocked: 'blocked', panel: 'issue', rovo: 'issue',
+  inbox: 'inbox', pass: 'blocked', dodge: 'issue', done: 'issue', policy: 'policy', payoff: 'payoff', end: 'end' };
+const DARK = new Set(['cold', 'who', 'trace', 'stakes', 'why', 'rewind']);
 
 /* ---------- per-scene drawing; lt = scene-local time, d = duration ---------- */
 const draw = {
-  hook(lt) {
-    rise($('hook-l1'), lt, 0.1); $('hook-l1').style.top = ''; $('hook-l1').style.position = 'absolute';
-    $('hook-l1').style.top = `${lerp(450, 300, ease(seg(lt, 1.2, 2.0)))}px`;
-    rise($('hook-card'), lt, 1.4, 0.8, 60);
-    rise($('hook-q1'), lt, 4.6); rise($('hook-q2'), lt, 5.8); rise($('hook-q3'), lt, 7.0);
+  cold(lt) {
+    rise($('cold-eye'), lt, 0.1, 0.8, 10);
+    const p = out(seg(lt, 0.5, 1.4));
+    $('cold-letter').style.opacity = p; $('cold-letter').style.transform = `translateY(${(1 - p) * 80}px) rotate(${lerp(-4, -1, p)}deg)`;
+    rise($('cl-a'), lt, 3.5, 0.5, 8); rise($('cl-b'), lt, 4.7, 0.5, 8); rise($('cl-c'), lt, 5.9, 0.5, 8);
+    $('cl-dm').className = lt > 8.4 ? 'mark' : '';
+    const z = ease(seg(lt, 8.2, 11));
+    $('cold').style.transform = `scale(${lerp(1, 1.08, z)})`; $('cold').style.transformOrigin = '960px 800px';
   },
-  title(lt) {
-    const p = out(seg(lt, 0, 1.1));
-    show($('title-word'), p, 0, lerp(0.92, 1, p));
-    rise($('title-sub'), lt, 0.7);
+  who(lt, d) {
+    rise($('w1'), lt, 0.4, 0.5, 20); rise($('w2'), lt, 1.8, 0.5, 20); rise($('w3'), lt, 3.2, 0.5, 20); rise($('w4'), lt, 4.6, 0.5, 20);
+    for (const id of ['w1', 'w2', 'w3', 'w4']) if (lt > 6.0) $(id).style.opacity = String(Number($(id).style.opacity) * (1 - 0.65 * seg(lt, 6.0, 6.6)));
+    const p = out(seg(lt, 6.1, 6.9)); show($('w-big'), p, 0, lerp(1.08, 1, p));
+  },
+  trace(lt) {
+    rise($('t-card'), lt, 0.3, 0.8, 40);
+    rise($('t1'), lt, 3.6, 0.5, 10); rise($('t2'), lt, 4.4, 0.5, 10); rise($('t3'), lt, 5.8, 0.5, 10);
+    const p = out(seg(lt, 7.2, 7.8)); show($('t4'), p, 0, lerp(1.15, 1, p));
+  },
+  stakes(lt) {
+    rise($('s-eye'), lt, 0.2, 0.8, 10);
+    const pop = (el, at) => { const p = out(seg(lt, at, at + 0.7)); show(el, p, (1 - p) * 40, lerp(0.92, 1, p)); };
+    pop($('s1'), 3.4); pop($('s2'), 5.8); pop($('s3'), 9.6);
+    rise($('s-src'), lt, 10.5, 0.8, 0);
+  },
+  why(lt) {
+    rise($('y1'), lt, 0.5, 0.6, 20); rise($('y2'), lt, 2.5, 0.6, 20); rise($('y3'), lt, 4.5, 0.6, 20);
+    rise($('y4'), lt, 7.1, 0.8, 10);
+  },
+  rewind(lt) {
+    const shake = lt < 2.4 ? Math.sin(lt * 90) * 3 : 0;
+    $('rw-lines').style.opacity = 0.9 * (1 - seg(lt, 2.2, 2.6));
+    show($('rw-sym'), seg(lt, 0.1, 0.3) * (1 - seg(lt, 2.2, 2.5)), shake);
+    const months = Math.max(0, Math.round(8 - 8 * seg(lt, 0.4, 2.0)));
+    $('rw-time').textContent = lt < 2.1 ? `${months} month${months === 1 ? '' : 's'} earlier` : 'Tuesday, 09:12';
+    show($('rw-time'), seg(lt, 0.2, 0.4) * (1 - seg(lt, 4.0, 4.3)), shake);
+    const p = out(seg(lt, 4.4, 5.4)); show($('rw-word'), p, 0, lerp(0.9, 1, p));
+    rise($('rw-sub'), lt, 5.4, 0.7, 14);
+    $('rewind').style.background = `rgb(${Math.round(lerp(5, 18, seg(lt, 4.0, 4.8)))},${Math.round(lerp(5, 18, seg(lt, 4.0, 4.8)))},${Math.round(lerp(7, 22, seg(lt, 4.0, 4.8)))})`;
   },
   blocked(lt) {
     const card = $('b-card');
@@ -306,14 +409,15 @@ const draw = {
   },
   rovo(lt) {
     resetIssue();
-    const sheet = $('rovo'); const s = out(seg(lt, 0.1, 0.8)) * (1 - out(seg(lt, 5.6, 6.2)));
+    $('p-before-done').style.display = 'none';
+    const sheet = $('rovo'); const s = out(seg(lt, 0.1, 0.8)) * (1 - out(seg(lt, 12.2, 12.8)));
     sheet.style.opacity = s; sheet.style.transform = `translateX(${(1 - s) * 80}px)`;
     rise($('r-q'), lt, 0.9, 0.4, 10);
     $('r-typing').style.opacity = seg(lt, 1.8, 2.0) * (1 - seg(lt, 3.2, 3.3));
     rise($('r-a'), lt, 3.3, 0.5, 10);
     const draftBox = $('p-draft'); draftBox.style.display = 'block'; draftBox.style.opacity = out(seg(lt, 4.8, 5.4)) * (1 - seg(lt, 7.2, 7.5));
     if (lt > 7.5) draftBox.style.display = 'none';
-    moveCursor(lt, [[5.6, 1700, 1000], [6.8, 1103, 645], [7.1, 1103, 645], [8.4, 1066, 760], [9.4, 1066, 760], [10.4, 1500, 1060]]);
+    moveCursor(lt, [[5.6, 1700, 1000], [6.8, 1160, 682], [7.1, 1160, 682], [8.4, 1160, 700], [9.4, 1160, 700], [10.4, 1500, 1060]]);
     cursor.show = seg(lt, 5.6, 6.0) * (1 - seg(lt, 10.0, 10.4));
     press($('p-usedraft'), lt, 7.0); press($('p-save'), lt, 9.0);
     $('p-f1').textContent = lt > 7.2 ? 'Verify callers against FICA records before account changes' : '';
@@ -347,7 +451,7 @@ const draw = {
     $('p-why').innerHTML = lt > 4.4 ? 'matched earlier (“SA ID number”); <b>it stays until an approver dismisses it</b>' : 'mentions “SA ID number”';
     ring($('p-ring'), $('p-why').parentElement, lt, 4.5, 7.0);
     // change an approved answer
-    if (lt > 7.4) type($('p-f2'), 'Kept indefinitely for analytics', lt, 7.4, 9.0);
+    if (lt > 7.4) type($('p-f2'), 'Deleted ten years after account closure', lt, 7.4, 9.0);
     if (lt > 9.6) {
       $('p-appr').innerHTML = '<span style="color:var(--amber); font-weight:600">Answers changed after approval; re-approval needed</span>';
       $('p-approve').style.display = 'inline-flex'; $('p-build').className = 'loz red'; $('p-build').textContent = 'Blocked';
@@ -362,28 +466,30 @@ const draw = {
     $('done-flag').style.opacity = flagIn; $('done-flag').style.transform = `translateY(${(1 - flagIn) * -20}px)`;
     ring($('p-ring'), $('p-before-done'), lt, 3.8, 7.8);
     type($('p-f3'), 'https://acme.example/privacy-notice#id-numbers', lt, 4.8, 6.4);
-    moveCursor(lt, [[6.2, 1600, 1000], [7.0, 1066, 760], [7.4, 1066, 760], [8.6, 1600, 1050]]);
+    moveCursor(lt, [[6.2, 1600, 1000], [7.0, 1160, 700], [7.4, 1160, 700], [8.6, 1600, 1050]]);
     cursor.show = seg(lt, 6.2, 6.5) * (1 - seg(lt, 8.3, 8.6));
     press($('p-save'), lt, 7.2);
     if (lt > 7.4) { $('p-f3-ok').textContent = '✓'; $('p-close').className = 'loz green'; $('p-close').textContent = 'Clear'; }
     if (lt > 9.0) {
       $('i-status').textContent = 'Done'; $('i-status').className = 'loz green';
-      $('p-next').className = 'box ok'; $('p-next-title').textContent = 'Privacy review complete';
+      $('p-next').className = 'box ok'; $('p-next-title').textContent = 'Privacy review complete'; $('p-next-sub').style.display='none';
     }
   },
   policy(lt) {
     rise($('pol-doc'), lt, 0.0, 0.7, 40);
     $('pol-hl').className = lt > 1.6 ? 'mark' : '';
     rise($('pol-q'), lt, 2.8, 0.5, 20);
-    rise($('pol-rule'), lt, 4.8, 0.8, 40);
-    rise($('pol-cov'), lt, 8.8, 0.8, 40);
-    $('cov-bad').style.background = lt > 11.8 ? `rgba(229,56,59,${0.10 + 0.06 * Math.sin(lt * 4)})` : '';
+    rise($('pol-rule'), lt, 4.2, 0.8, 40);
+    rise($('pol-cov'), lt, 6.4, 0.8, 40);
+    $('cov-bad').style.background = lt > 8.6 ? `rgba(229,56,59,${0.10 + 0.06 * Math.sin(lt * 4)})` : '';
   },
-  close(lt) {
-    const a = seg(lt, 0.2, 1.0) * (1 - seg(lt, 3.6, 4.1)); show($('cl-1'), a, (1 - out(seg(lt, 0.2, 1.0))) * 30);
-    const b = seg(lt, 4.3, 5.1) * (1 - seg(lt, 8.0, 8.5)); show($('cl-2'), b, (1 - out(seg(lt, 4.3, 5.1))) * 30);
-    const c = out(seg(lt, 8.7, 9.7)); show($('cl-3'), c, 0, lerp(0.95, 1, c));
-    rise($('cl-4'), lt, 10.6);
+  payoff(lt) {
+    const p = out(seg(lt, 0.3, 1.1)); $('po-letter').style.opacity = p; $('po-letter').style.transform = `translateX(${(1 - p) * -60}px) rotate(-2deg)`;
+    rise($('po-rec'), lt, 4.4, 0.8, 40);
+    for (const [i, id] of ['r1', 'r2', 'r3', 'r4', 'r5', 'r6'].entries()) rise($(id), lt, 5.0 + i * 0.4, 0.4, 8);
+    const secs = Math.min(10, Math.floor(10 * seg(lt, 4.6, 7.8)));
+    $('po-clock').textContent = `⏱ 0:${String(secs).padStart(2, '0')}`;
+    show($('po-clock'), seg(lt, 4.5, 4.9), 0, 1);
   },
   end(lt) {
     const p = out(seg(lt, 0, 1.2)); show($('end-word'), p, 0, lerp(0.94, 1, p));
@@ -395,7 +501,7 @@ function inboxApprove(lt) {
   resetIssue(); hideRovo();
   $('p-f1').textContent = 'Verify callers against FICA records before account changes'; $('p-f1-ok').textContent = '✓'; $('p-f2-ok').textContent = '✓';
   $('p-next').className = 'box info'; $('p-next-title').textContent = 'Next: waiting for approval'; $('p-more').textContent = 'All 4 answers saved';
-  moveCursor(lt, [[5.4, 1600, 1000], [6.8, 1590, 830], [7.4, 1590, 830], [8.6, 1700, 1060]]);
+  moveCursor(lt, [[5.4, 1600, 1000], [6.8, 1672, 760], [7.4, 1672, 760], [8.6, 1700, 1060]]);
   cursor.show = seg(lt, 5.4, 5.8) * (1 - seg(lt, 8.3, 8.7));
   press($('p-approve'), lt, 7.2);
   if (lt > 7.5) approvedState();
@@ -407,17 +513,17 @@ function approvedState() {
   $('p-f1-ok').textContent = '✓'; $('p-f2-ok').textContent = '✓'; $('p-more').textContent = 'All 4 answers saved';
   $('p-appr').innerHTML = '<span style="display:inline-flex;align-items:center;gap:8px;color:var(--green);font-weight:600">Approved by <span class="avatar io">TM</span> Thandi M.</span>';
   $('p-approve').style.display = 'none'; $('p-build').className = 'loz green'; $('p-build').textContent = 'Clear';
-  $('p-next').className = 'box info'; $('p-next-title').textContent = 'Approved: work can start. Before Done, add the privacy notice link.';
+  $('p-next').className = 'box info'; $('p-next-title').textContent = 'Approved: work can start. Before Done, add the privacy notice link.'; $('p-next-sub').style.display='none';
 }
 function resetIssue() {
   $('p-f1').textContent = ''; $('p-f1').style.borderColor = ''; $('p-f1-ok').textContent = ''; $('p-f2-ok').textContent = ''; $('p-f3-ok').textContent = '';
   $('p-f2').textContent = 'Deleted five years after account closure, as FICA requires'; $('p-f3').textContent = '';
-  $('p-next').className = 'box warn'; $('p-next-title').textContent = 'Next: answer 4 questions before work starts';
+  $('p-next').className = 'box warn'; $('p-next-title').textContent = 'Next: answer 4 questions before work starts'; $('p-next-sub').style.display='inline-flex';
   $('p-more').textContent = '+ 2 more questions'; $('p-appr').textContent = 'Waiting for an approver'; $('p-approve').style.display = 'inline-flex';
   $('p-build').className = 'loz red'; $('p-build').textContent = 'Blocked'; $('p-close').className = 'loz red'; $('p-close').textContent = 'Blocked';
   $('p-why').textContent = 'mentions “SA ID number”'; $('i-phrase').textContent = 'SA ID number';
   $('i-summary').textContent = 'Add SA ID number field to customer signup'; $('i-status').textContent = 'To do'; $('i-status').className = 'loz grey';
-  $('p-draft').style.display = 'none'; $('p-ring').style.opacity = 0; $('done-flag').style.opacity = 0;
+  $('p-draft').style.display = 'none'; $('p-ring').style.opacity = 0; $('done-flag').style.opacity = 0; $('p-before-done').style.display = 'block';
   for (const c of ['c1', 'c2', 'c3']) $(c).style.opacity = 0;
 }
 function hideRovo() { $('rovo').style.opacity = 0; }
@@ -441,6 +547,7 @@ window.render = function render(t) {
   if (!active) return;
   const lt = t - active.start, d = active.dur;
   const el = $(SCENE_EL[active.id]);
+  document.body.style.background = DARK.has(active.id) ? '#050507' : '';
   // Gentle cross-fade + Apple-style drift
   const fade = clamp(seg(lt, 0, 0.45) * (1 - seg(lt, d - 0.45, d)));
   el.style.opacity = fade;

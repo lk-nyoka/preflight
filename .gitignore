@@ -50,3 +50,6 @@ Thumbs.db
 
 
 /.forge/
+
+# Generated film assets (rebuild with video/voice.py and video/build.py)
+video/build/

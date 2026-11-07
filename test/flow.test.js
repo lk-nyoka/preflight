@@ -68,6 +68,8 @@ mock.module('../src/jira.js', {
       return { key: `PRIV-${n}` };
     },
     getWorkflowCoverage: async () => coverageRows,
+    adfToText: (n) => (typeof n === 'string' ? n : JSON.stringify(n || '')),
+    getDisplayName: async (id) => ({ 'io-1': 'Thandi M.' }[id] || null),
   },
 });
 
@@ -217,7 +219,8 @@ test('governance: named approvers lock approval, the approver list and active ru
   assert.equal(second.ok, false);
   assert.match(second.error, /already waiting/);
   const firstProposal = (await governance.pendingRuleChanges())[0];
-  assert.ok(firstProposal.diff.phrasesRemoved.length > 0, 'approver sees what the edit removes');
+  assert.ok(firstProposal.diff.weakening.some((w) => /− phrase/.test(w)), 'approver sees what the edit removes');
+  assert.ok(firstProposal.diff.lostExamples.length > 0, 'approver sees examples that no longer match');
   assert.equal(firstProposal.diff.weakens, true);
   await admin('withdrawProposal', { id: 'popia-identifiers' });
 
@@ -253,12 +256,26 @@ test('exploit A blocked: an admin cannot reset and then name themselves', async 
   assert.equal((await store_.getSettings()).pendingReset, null);
   // Let a reset mature, then try to self-appoint.
   await admin('requestReset', { reason: 'Information Officer has left the company' });
-  const s = await store_.getSettings();
+  let s = await store_.getSettings();
   store.set('settings', { ...s, pendingReset: { ...s.pendingReset, effectiveAt: Date.now() - 1 } });
+  // Even after 72 hours nothing happens until a SECOND Jira admin confirms.
+  await governance.applyDueReset();
+  assert.equal((await store_.getSettings()).approverAccountIds.length, 1, 'unconfirmed reset never applies');
+  assert.equal((await admin('confirmReset')).ok, false, 'the requester cannot confirm their own reset');
+  admins.add('admin-2');
+  as('admin-2');
+  assert.equal((await admin('confirmReset')).ok, true);
   await governance.applyDueReset();
   assert.deepEqual((await store_.getSettings()).approverAccountIds, []);
-  await assert.rejects(governance.setApprovers(['admin-1'], 'admin-1'), /cannot name yourself/);
-  await governance.setApprovers(['io-1'], 'admin-1');
+  // For 30 days the requester cannot approve, weaken, or name the new approvers.
+  as('admin-1');
+  assert.equal(await service.canCurrentUserApprove('admin-1'), false);
+  assert.equal((await admin('saveSettings', { failClosed: false })).ok, false);
+  await assert.rejects(governance.setApprovers(['admin-1'], 'admin-1'), /another Jira admin/);
+  await assert.rejects(governance.setApprovers(['someone'], 'admin-1'), /another Jira admin/);
+  as('admin-2');
+  await governance.setApprovers(['io-1'], 'admin-2');
+  as('admin-1');
   assert.deepEqual((await store_.getSettings()).approverAccountIds, ['io-1']);
   assert.ok((await store_.listAudit('admin')).some((e) => /Reset to small-team mode took effect/.test(e.event)));
 });

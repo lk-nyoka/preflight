@@ -68,6 +68,14 @@ export async function getWorkItem(issueIdOrKey, { asUser = true } = {}) {
   };
 }
 
+/** A user's display name (for gate messages). Uses the app's access; returns null if hidden. */
+export async function getDisplayName(accountId) {
+  const response = await api.asApp().requestJira(route`/rest/api/3/user?accountId=${accountId}`, { headers: { Accept: 'application/json' } });
+  if (!response.ok) return null;
+  const user = await response.json();
+  return user?.displayName || null;
+}
+
 /** Does the signed-in user hold the Jira "Administer" global permission? */
 export async function currentUserIsJiraAdmin() {
   const data = await readJson(
@@ -79,10 +87,10 @@ export async function currentUserIsJiraAdmin() {
   return Boolean(data?.permissions?.ADMINISTER?.havePermission);
 }
 
-/** Add a comment as the signed-in user. */
-export async function addComment(issueIdOrKey, adfBody) {
+/** Add a comment as the signed-in user (or as the app, from triggers that have no user). */
+export async function addComment(issueIdOrKey, adfBody, { asApp = false } = {}) {
   return readJson(
-    await api.asUser().requestJira(route`/rest/api/3/issue/${issueIdOrKey}/comment`, {
+    await (asApp ? api.asApp() : api.asUser()).requestJira(route`/rest/api/3/issue/${issueIdOrKey}/comment`, {
       method: 'POST',
       headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
       body: JSON.stringify({ body: adfBody }),

@@ -4,8 +4,9 @@
  * rovo:mcp module also exposes as MCP tools).
  */
 import {
-  assess, syncIndexes, proposeAnswer, requestApproval, flagRule, draftRuleFromPolicy, onIssueDeleted, declare, PreflightError,
+  assess, syncIndexes, proposeAnswer, requestApproval, flagRule, draftRuleFromPolicy, onIssueDeleted, declare, checkBypass, PreflightError,
 } from './service.js';
+import { adfToText, getDisplayName } from './jira.js';
 import { getRules, saveRules, getSettings, markGateSeen, appendAudit, listQueue } from './store.js';
 import { redact } from './engine/evaluate.js';
 import { POPIA_RULES, POPIA_PACK_ID } from './rulepacks/popia.js';
@@ -22,12 +23,16 @@ import { POPIA_RULES, POPIA_PACK_ID } from './rulepacks/popia.js';
  */
 async function validate(issue, stage) {
   try {
-    // Read-only: the gate never writes evidence (sticky matches are saved by triggers and the panel).
-    const { workItem, result } = await assess(issue.id || issue.key, { asUser: false, persist: false });
+    // The gate also remembers what matched (best effort: a storage hiccup never changes its decision).
+    const { workItem, result } = await assess(issue.id || issue.key, { asUser: false, persist: 'best-effort' });
     await markGateSeen(workItem.projectKey, workItem.key, stage).catch(() => {});
     const view = stage === 'build' ? result.stages.build : result.stages.done;
     if (view.status === 'blocked') {
-      return { result: false, errorMessage: `Preflight: ${view.summary} Open the Preflight panel on ${workItem.key} to see what to do next.` };
+      const who = view.open.some((o) => o.type === 'approval') ? await approverNames() : '';
+      return {
+        result: false,
+        errorMessage: `Preflight: ${view.summary}${who ? ` Approver: ${who}.` : ''} Open the Preflight panel on ${workItem.key} to see what to do next.`,
+      };
     }
     return { result: true };
   } catch (error) {
@@ -45,6 +50,19 @@ async function validate(issue, stage) {
   }
 }
 
+/** Display names of the named approvers for gate messages (best effort). */
+async function approverNames() {
+  try {
+    const { approverAccountIds } = await getSettings();
+    if (!approverAccountIds.length) return 'any Jira admin (small-team mode)';
+    const names = await Promise.all(approverAccountIds.slice(0, 3).map((id) => getDisplayName(id).catch(() => null)));
+    const known = names.filter(Boolean);
+    return known.length ? known.join(' or ') : '';
+  } catch {
+    return '';
+  }
+}
+
 export const validateBuild = ({ issue }) => validate(issue, 'build');
 export const validateDone = ({ issue }) => validate(issue, 'done');
 
@@ -52,29 +70,63 @@ export const validateDone = ({ issue }) => validate(issue, 'done');
 /* Product triggers                                                    */
 /* ------------------------------------------------------------------ */
 
-/** Re-evaluate on create/update so sticky matches, JQL and the approvals inbox stay current. */
+/**
+ * Earlier wording carried by the event: the text at creation, and the "from"
+ * side of summary/description edits. Used only to remember matches, so wording
+ * that was live for a few seconds still counts.
+ */
+export function earlierWording(event) {
+  const parts = [];
+  const fields = event?.issue?.fields || {};
+  if (fields.summary) parts.push(String(fields.summary));
+  if (fields.description) parts.push(adfToText(fields.description));
+  for (const item of event?.changelog?.items || []) {
+    if (['summary', 'description'].includes(String(item.field || item.fieldId || '').toLowerCase()) && item.fromString) parts.push(String(item.fromString));
+  }
+  return parts.join('\n').slice(0, 20000);
+}
+
+async function recheck(issueId, extraText = '') {
+  const state = await assess(issueId, { asUser: false, extraText });
+  const record = await checkBypass(state).catch((error) => {
+    console.warn('Preflight bypass check failed', issueId, error.message);
+    return state.record;
+  });
+  await syncIndexes(state.workItem, state.result, record);
+}
+
+/** Re-evaluate on create/update so sticky matches, bypass detection, JQL and the inbox stay current. */
 export async function onIssueChanged(event) {
   const issueId = event?.issue?.id;
   if (!issueId) return;
   try {
-    const { workItem, result } = await assess(issueId, { asUser: false });
-    await syncIndexes(workItem, result);
+    await recheck(issueId, earlierWording(event));
   } catch (error) {
     console.error('Preflight trigger failed', issueId, error.message);
   }
 }
 
-/** Daily: re-evaluate everything in the inbox, so expired exceptions and stale entries update JQL and the inbox. */
-export async function onDaily() {
-  const entries = (await listQueue()).slice(0, 300);
+/**
+ * Daily: re-check inbox items, oldest first, within a time budget. Updates expired
+ * exceptions and stale entries, and catches bypasses on items no one has touched.
+ */
+export async function onDaily({ budgetMs = 20000 } = {}) {
+  const started = Date.now();
+  const entries = (await listQueue()).sort((a, b) => (a.updatedAt || 0) - (b.updatedAt || 0));
+  let done = 0;
   for (const e of entries) {
+    if (Date.now() - started > budgetMs) break;
     try {
-      const { workItem, result } = await assess(e.issueId, { asUser: false });
-      await syncIndexes(workItem, result);
+      await recheck(e.issueId);
     } catch (error) {
       console.warn('Preflight daily resync skipped', e.key, error.message);
     }
+    done += 1;
   }
+  if (done < entries.length) {
+    await appendAudit('admin', { by: 'app', via: 'engine', event: `Daily re-check covered ${done} of ${entries.length} open items; the rest are checked on the next run (oldest first)` }).catch(() => {});
+  }
+  return { checked: done, total: entries.length };
 }
 
 export async function onIssueDeletedEvent(event) {

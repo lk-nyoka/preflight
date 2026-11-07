@@ -272,6 +272,7 @@ const App = () => {
                 {state.pending.map((p) => (
                   <Inline key={p.ruleId} space="space.100" alignBlock="center" shouldWrap>
                     <Text>{p.title}: {p.kind}{p.diff ? ` (${p.diff.summary})` : ''}, proposed {when(p.at)}</Text>
+                    {(p.diff?.weakening || []).map((w) => <Text key={w}><Em>{`Weakens: ${w}`}</Em></Text>)}
                     {p.by === state.me && <Button appearance="subtle" isDisabled={busy} onClick={() => call('withdrawProposal', { id: p.ruleId })}>Withdraw</Button>}
                   </Inline>
                 ))}
@@ -307,7 +308,7 @@ const App = () => {
                 />
                 <ButtonGroup>
                   <Button onClick={() => setEditing({ rule: null })}>New rule</Button>
-                  <Button appearance="subtle" isDisabled={busy} onClick={() => call('resetPack')}>Restore POPIA starter pack (as drafts)</Button>
+                  <Button appearance="subtle" isDisabled={busy} onClick={() => call('resetPack')}>Restore POPIA starter pack (as drafts; only when none is active)</Button>
                 </ButtonGroup>
                 <Text><Em>Tip: ask the Preflight agent in Rovo to "draft Preflight rules from our privacy policy page". Drafts appear here and are never enforced until you activate them.</Em></Text>
               </>
@@ -358,11 +359,18 @@ const App = () => {
                   <Text><Em>Only a current approver can change this list, or the settings that weaken a control (they can do it under Apps → Preflight reviews).</Em></Text>
                   {state.settings.pendingReset ? (
                     <SectionMessage appearance="warning" title="Reset pending">
-                      <Text>Takes effect {when(state.settings.pendingReset.effectiveAt)} unless an approver cancels it.</Text>
+                      <Text>Reason: {state.settings.pendingReset.reason}. Takes effect {when(state.settings.pendingReset.effectiveAt)} if a second Jira admin has confirmed it, unless an approver cancels it.</Text>
+                      {state.settings.pendingReset.confirmedBy ? (
+                        <Text><Em>Confirmed by a second admin.</Em></Text>
+                      ) : state.settings.pendingReset.by !== state.me ? (
+                        <Inline><Button appearance="warning" isDisabled={busy} onClick={() => call('confirmReset')}>Confirm as second admin</Button></Inline>
+                      ) : (
+                        <Text><Em>Waiting for another Jira admin to confirm.</Em></Text>
+                      )}
                     </SectionMessage>
                   ) : (
                     <Stack space="space.050">
-                      <Text>If your approver has left, request a break-glass reset. It takes effect after 72 hours, any approver can cancel it, and you cannot name yourself approver afterwards.</Text>
+                      <Text>If your approver has left, request a break-glass reset. A second Jira admin must confirm it, it takes effect 72 hours after your request, any approver can cancel it, and for 30 days afterwards you cannot approve work, weaken a control or name the new approvers.</Text>
                       <Inline space="space.100" alignBlock="center">
                         <Textfield id="reset-reason" value={resetReason} placeholder="Reason" onChange={(e) => setResetReason(e.target.value)} />
                         <Button appearance="warning" isDisabled={resetReason.trim().length < 10 || busy} onClick={() => call('requestReset', { reason: resetReason })}>Request reset</Button>
@@ -374,7 +382,7 @@ const App = () => {
             </Stack>
             {[
               ['requireDeclaration', 'Ask for a Yes / No / Unsure declaration before work starts on items no rule matched'],
-              ['separationOfDuties', 'Separation of duties: the reporter of a work item cannot approve it'],
+              ['separationOfDuties', 'Separation of duties: reporters, assignees and answer authors cannot approve'],
               ['failClosed', 'Fail closed (recommended): if Preflight cannot evaluate, hold the transition with a clear message'],
             ].map(([key, text]) => (
               <Inline key={key} space="space.100" alignBlock="center">

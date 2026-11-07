@@ -32,24 +32,31 @@ workflow editor vary slightly; look for *Rules* or *Validators* on the transitio
 1. Open **"Add SA ID number field to customer signup"**. The Preflight panel shows *Start work: Blocked*, a next-step
    box ("answer 4 questions before work starts") and who approves. With no named approvers, Preflight is in
    **small-team mode** and Jira admins approve; the panel says so.
-2. Drag it to **In Progress**. Jira refuses with a message naming the rule, the POPIA sections and what is missing.
+2. Drag it to **In Progress**. Jira refuses with a message naming the rule, what is missing and who approves.
 3. Answer the four questions (one is a pick-list) and click **Save answers**. Then click **Approve**.
 4. Drag it to **In Progress**: it moves.
 5. Drag it to **Done**: refused, because *Privacy notice updated (link)* is still open. Paste any https link, save, and
    move it to Done.
-6. Try to dodge it on another item: open **"Sync customer list to our US-based CRM vendor"**, edit the description and
-   remove "US-based" and "us-east". The rules stay ("matched earlier") until an approver dismisses them with a reason.
+6. Try to dodge it: open **"Store learner allergy and medical notes for school trip bookings"** and reword BOTH the
+   summary and the description so neither mentions learners, allergies or medical notes (for example "School trip
+   booking form update"). The panel still shows the rules, now marked "matched earlier", until an approver dismisses
+   them with a reason. (If any matched phrase is left in the text, the panel shows "mentions …" instead.)
 7. Change an approved answer on any item and save: the approval goes stale and the build gate closes again.
-8. **Apps → Preflight reviews** shows everything waiting for approval and everything waiting on the team.
-9. **Setup → Test a rule**: paste any ticket text and see which rules match and why.
-10. Optional, **Rovo → Preflight agent** on a demo item: "What do I need before I can start this?", then "Help me answer
+8. **Apps → Preflight reviews** shows everything waiting for approval and everything waiting on the team. Approval
+   happens on the work item itself, where the answers are.
+9. Optional, bypass detection: create a work item "Store customer passport numbers" and use a workflow without the
+   gates (or drag it straight to Done in a project where the gates aren't attached). Within a few seconds Preflight
+   comments on it, mentioning the approvers, and it appears in the inbox under *Past a gate with the review open*.
+10. **Setup → Test a rule**: paste any ticket text and see which rules match and why.
+11. Optional, **Rovo → Preflight agent** on a demo item: "What do I need before I can start this?", then "Help me answer
     the retention question". The answer appears in the panel as a **Rovo draft**; it only counts after you click
     *Use draft* and *Save answers*.
 
 ## Notes
 
 - Preflight **fails closed**: if it cannot evaluate a work item, the transition is held with a clear message.
-- To see governance: in **Settings**, name yourself as the only approver; then try editing an active rule from a second
-  admin account. The edit becomes a proposal that the approver applies or rejects under *Preflight reviews*.
+- To see governance: in **Settings**, name yourself as the only approver; then, from a second admin account, edit an
+  active rule (for example add "id number" to its *Ignore* list). The edit becomes a proposal; under *Preflight
+  reviews* the approver sees it flagged *WEAKENS*, with the examples that no longer match.
 - The MCP tools (`rovo:mcp`, Preview) need an org admin to enable external MCP access; the demo video shows them.
 - Preflight records your organisation's review. It is not legal advice and never says work is "compliant".

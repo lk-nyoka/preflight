@@ -18,6 +18,7 @@ import { getWorkItem, currentUserIsJiraAdmin, setPreflightProperty, getPreflight
 import { PreflightError } from './errors.js';
 import { kvs } from '@forge/kvs';
 import { DECLARATION_RULE_ID } from './rulepacks/popia.js';
+import { coolingDown } from './governance.js';
 
 export { PreflightError };
 
@@ -31,14 +32,22 @@ export function evalOptions(rules, settings) {
 }
 
 /** Load work item, rules, settings and evidence, and run the engine. */
-export async function assess(issueIdOrKey, { asUser = true, persist = true } = {}) {
+/**
+ * @param extraText  earlier wording of the work item (from a trigger's changelog
+ *                   or creation payload). Used ONLY to remember rules that matched,
+ *                   so a ticket reworded seconds after it was created is still caught.
+ * @param persist    true: save new sticky matches (errors propagate, except a busy lock).
+ *                   'best-effort': save them but never fail the caller (used by the gates).
+ */
+export async function assess(issueIdOrKey, { asUser = true, persist = true, extraText = '' } = {}) {
   const workItem = await getWorkItem(issueIdOrKey, { asUser });
   const [rules, settings, record] = await Promise.all([getRules(), getSettings(), getRecord(workItem.id)]);
   const opts = evalOptions(rules, settings);
   let result = evaluate(workItem, rules, record, opts);
+  const seen = extraText ? evaluate({ ...workItem, text: `${workItem.text}\n${extraText}` }, rules, record, opts) : result;
 
   // Remember rules that matched by phrase or label so rewording cannot remove them.
-  const newlyMatched = result.applicable.filter((m) => !record.matched?.[m.ruleId] && (m.why.keywords.length || m.why.labels.length));
+  const newlyMatched = seen.applicable.filter((m) => !record.matched?.[m.ruleId] && (m.why.keywords.length || m.why.labels.length));
   if (newlyMatched.length && persist) {
     try {
       const saved = await updateRecord(
@@ -57,14 +66,15 @@ export async function assess(issueIdOrKey, { asUser = true, persist = true } = {
       return { workItem, rules, settings, record: saved, result };
     } catch (error) {
       // Busy lock: the live text still matches, so the evaluation is correct; persist next time.
-      if (error.code !== 'BUSY') throw error;
+      if (error.code !== 'BUSY' && persist !== 'best-effort') throw error;
+      if (persist === 'best-effort' && error.code !== 'BUSY') console.warn('Preflight could not save sticky matches', error.message);
     }
   }
   return { workItem, rules, settings, record, result };
 }
 
 /** Keep the JQL mirror and the approvals inbox in step. Neither is ever used for enforcement. */
-export async function syncIndexes(workItem, result) {
+export async function syncIndexes(workItem, result, record = null) {
   const next = {
     status: result.status,
     build: result.stages.build.status,
@@ -78,7 +88,8 @@ export async function syncIndexes(workItem, result) {
     current.awaiting !== next.awaiting || current.rules?.join() !== next.rules.join();
   if (changed) await setPreflightProperty(workItem.id, { ...next, evaluatedAt: Date.now() });
 
-  const reviewOpen = ['blocked', 'exception'].includes(result.status) || result.stages.build.status === 'blocked';
+  const reviewOpen = ['blocked', 'exception'].includes(result.status) || result.stages.build.status === 'blocked' ||
+    Boolean(record?.bypass && !record.bypass.resolvedAt);
   await setQueueEntry(
     workItem.id,
     reviewOpen
@@ -88,7 +99,8 @@ export async function syncIndexes(workItem, result) {
           summary: redact(workItem.summary).slice(0, 200),
           projectKey: workItem.projectKey,
           awaitingApproval: result.awaitingApproval && result.status !== 'exception',
-          exception: result.status === 'exception' ? { expiresAt: null } : null,
+          exception: result.status === 'exception' ? { expiresAt: record?.exception?.expiresAt || null } : null,
+          bypassed: record?.bypass && !record.bypass.resolvedAt ? { stage: record.bypass.stage, status: record.bypass.status, at: record.bypass.at } : null,
           buildStatus: result.stages.build.status,
           openBuild: result.stages.build.open.length,
           openTotal: result.openCount,
@@ -119,7 +131,18 @@ export async function approverMode() {
 export async function canCurrentUserApprove(accountId) {
   const settings = await getSettings();
   if (settings.approverAccountIds.length) return settings.approverAccountIds.includes(accountId);
+  if (coolingDown(settings, accountId)) return false; // the admin who forced a reset cannot approve for 30 days
   return currentUserIsJiraAdmin();
+}
+
+/** Why the signed-in user cannot approve this rule on this work item (separation of duties), or null. */
+export function separationReason(settings, workItem, record, ruleId, accountId) {
+  if (!settings.separationOfDuties) return null;
+  if (workItem?.reporterAccountId === accountId) return 'you reported this work item';
+  if (workItem?.assigneeAccountId === accountId) return 'you are assigned to this work item';
+  const authors = Object.values(record?.answers?.[ruleId] || {}).map((a) => a.by);
+  if (authors.includes(accountId)) return 'you answered these questions';
+  return null;
 }
 
 async function requireApprover(accountId, workItem, record = null, ruleId = null) {
@@ -130,13 +153,8 @@ async function requireApprover(accountId, workItem, record = null, ruleId = null
     );
   }
   const settings = await getSettings();
-  if (settings.separationOfDuties) {
-    if (workItem?.reporterAccountId === accountId || workItem?.assigneeAccountId === accountId) {
-      throw new PreflightError('Separation of duties is on: the reporter or assignee of a work item cannot approve it.');
-    }
-    const authors = Object.values(record?.answers?.[ruleId] || {}).map((a) => a.by);
-    if (authors.includes(accountId)) throw new PreflightError('Separation of duties is on: you answered these questions, so another approver must approve.');
-  }
+  const reason = separationReason(settings, workItem, record, ruleId, accountId);
+  if (reason) throw new PreflightError(`Separation of duties is on and ${reason}, so another approver must do this.`);
 }
 
 function findApplicable(result, ruleId) {
@@ -213,13 +231,18 @@ export async function discardDraft(issueIdOrKey, ruleId, requirementId, actor) {
 export async function declare(issueIdOrKey, value, actor, via = 'panel') {
   if (!['yes', 'no', 'unsure'].includes(value)) throw new PreflightError('Choose Yes, No or Unsure.');
   const { workItem, record } = await assess(issueIdOrKey);
-  const current = record.declaration?.value;
-  if (value === 'no' && (current === 'yes' || current === 'unsure') && record.declaration.by !== actor) {
-    // Someone else said this work affects personal information; only an approver can overrule that.
+  const RANK = { no: 0, unsure: 1, yes: 2 };
+  const current = record.declaration?.value || null;
+  // Everyone who has ever said this work affects (or may affect) personal information.
+  const raisedBy = new Set(record.declaration?.raisedBy || (current && current !== 'no' ? [record.declaration.by] : []));
+  const downgrade = current && RANK[value] < RANK[current];
+  if (downgrade && [...raisedBy].some((id) => id !== actor)) {
+    // Someone else raised this; only an approver can lower it, in one step or several.
     await requireApprover(actor, workItem);
   }
-  await updateRecord(workItem.id, actor, `Declared personal information impact: ${value}`, (rec) => {
-    rec.declaration = { value, by: actor, at: Date.now(), via };
+  if (value !== 'no') raisedBy.add(actor);
+  await updateRecord(workItem.id, actor, `Declared personal information impact: ${value}${current ? ` (was ${current})` : ''}`, (rec) => {
+    rec.declaration = { value, by: actor, at: Date.now(), via, raisedBy: [...raisedBy] };
   }, { via });
   return refresh(workItem.id);
 }
@@ -302,9 +325,11 @@ export async function setException(issueIdOrKey, actor, reason, days = 30) {
   const ruleIds = [...new Set(result.open.map((o) => o.ruleId))];
   if (!ruleIds.length) throw new PreflightError('Nothing is open, so there is nothing to grant an exception for.');
   const titles = result.applicable.filter((m) => ruleIds.includes(m.ruleId)).map((m) => m.title);
+  // Also pin the phrases each waived rule matched; if the work item later mentions more, the waiver no longer covers it.
+  const scopes = Object.fromEntries(result.applicable.filter((m) => ruleIds.includes(m.ruleId)).map((m) => [m.ruleId, m.scope]));
   const expiresAt = Date.now() + validDays * 24 * 60 * 60 * 1000;
   await updateRecord(workItem.id, actor, `Exception granted for ${validDays} day(s) covering ${titles.join(', ')}: ${redact(reason)}`, (rec) => {
-    rec.exception = { by: actor, at: Date.now(), reason: redact(String(reason)).slice(0, 500), expiresAt, ruleIds };
+    rec.exception = { by: actor, at: Date.now(), reason: redact(String(reason)).slice(0, 500), expiresAt, ruleIds, scopes };
   });
   return refresh(workItem.id);
 }
@@ -356,6 +381,55 @@ export async function requestApproval(issueIdOrKey, actor, message = '', via = '
 
 export { draftRuleFromPolicy } from './governance.js';
 
+/* ---------------- bypass detection ---------------- */
+
+/**
+ * A work item whose status is past a gate while that gate's stage is still open
+ * skipped the gate (moved to another project, changed work type, or a workflow
+ * without the validator) or its review went stale after it passed. Either way an
+ * approver should look. Records it once, comments to the approvers, and puts it
+ * in the inbox until the review is complete again.
+ */
+export async function checkBypass({ workItem, result, record }) {
+  const category = workItem.statusCategory;
+  let stage = null;
+  if (category === 'done' && result.status === 'blocked') stage = 'done';
+  else if ((category === 'indeterminate' || category === 'done') && result.stages.build.status === 'blocked') stage = 'build';
+  const open = record.bypass && !record.bypass.resolvedAt;
+  if (!stage) {
+    if (!open) return record;
+    return updateRecord(workItem.id, 'app', 'Back in step: the privacy review is complete for the current status', (rec) => {
+      rec.bypass = { ...rec.bypass, resolvedAt: Date.now() };
+    }, { via: 'engine' });
+  }
+  if (open && record.bypass.stage === stage) return record;
+  const what = stage === 'build' ? 'review before build' : 'evidence before Done';
+  const event = `${workItem.key} is in "${workItem.status}" but its ${what} is still open: a gate was skipped (moved project, changed work type or a workflow without the validator) or the review went stale after the gate`;
+  const saved = await updateRecord(workItem.id, 'app', event, (rec) => {
+    rec.bypass = { stage, status: workItem.status, at: Date.now(), resolvedAt: null };
+  }, { via: 'engine' });
+  await appendAudit('admin', { by: 'app', via: 'engine', action: 'gate.bypassed', event, issueKey: workItem.key }).catch(() => {});
+  try {
+    const settings = await getSettings();
+    const mentions = settings.approverAccountIds.slice(0, 5).flatMap((id) => [{ type: 'mention', attrs: { id } }, { type: 'text', text: ' ' }]);
+    await addComment(workItem.key, {
+      type: 'doc',
+      version: 1,
+      content: [{
+        type: 'paragraph',
+        content: [
+          { type: 'text', text: 'Preflight: ', marks: [{ type: 'strong' }] },
+          ...mentions,
+          { type: 'text', text: `this work item is in "${workItem.status}" but its privacy ${what} is not complete. Open the Preflight panel to finish it, and check the workflow has the Preflight gate.` },
+        ],
+      }],
+    }, { asApp: true });
+  } catch (error) {
+    console.warn('Preflight bypass comment failed', error.message);
+  }
+  return saved;
+}
+
 /* ---------------- lifecycle ---------------- */
 
 /** When a work item is deleted, delete its evidence (POPIA s14 spirit). The audit history is kept. */
@@ -368,7 +442,7 @@ export async function onIssueDeleted(issueId, issueKey) {
 async function refresh(issueId) {
   const state = await assess(issueId);
   try {
-    await syncIndexes(state.workItem, state.result);
+    await syncIndexes(state.workItem, state.result, state.record);
   } catch (error) {
     console.warn('Preflight index sync failed', error.message);
   }

@@ -62,6 +62,8 @@ export function cleanRule(input, existing) {
       clause: r.clause ? String(r.clause).slice(0, 40) : undefined,
       options: r.type === 'choice' ? options : undefined,
       minWords: r.minWords ? Math.max(1, Math.min(50, Number(r.minWords))) : undefined,
+      mustMention: r.type === 'answer' && r.mustMention ? split(r.mustMention).slice(0, 30) : undefined,
+      mustMentionHint: r.type === 'answer' && r.mustMentionHint ? String(r.mustMentionHint).slice(0, 160) : undefined,
     };
   });
 
