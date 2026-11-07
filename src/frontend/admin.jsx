@@ -219,14 +219,14 @@ const App = () => {
             <Heading size="small">1. Load the demo</Heading>
             <Text>Activates the POPIA starter rules and creates five sample work items (four that touch personal information, one that does not).</Text>
             <Inline space="space.100" alignBlock="center">
-              <Label labelFor="project">Project key</Label>
+              <Label labelFor="project">Space key</Label>
               <Textfield id="project" value={projectKey} placeholder="PRIV" width={120} onChange={(e) => setProjectKey(e.target.value)} />
               <Button appearance="primary" isDisabled={!projectKey.trim() || busy} onClick={() => call('loadDemo', { projectKey })}>Load demo</Button>
             </Inline>
 
             <Heading size="small">2. Attach the two gates</Heading>
             <List type="ordered">
-              <ListItem><Text>Open the project's workflow (company-managed: Project settings → Workflows; team-managed: Project settings → Work types → Edit workflow).</Text></ListItem>
+              <ListItem><Text>Open the space's workflow (company-managed: Space settings → Workflows, or Jira settings → Work items → Workflows; team-managed: Space settings → Work types → Edit workflow).</Text></ListItem>
               <ListItem><Text>On the transition into <Strong>In Progress</Strong>, add the rule <Strong>Preflight: privacy review before build</Strong>.</Text></ListItem>
               <ListItem><Text>On the transition into <Strong>Done</Strong>, add <Strong>Preflight: privacy evidence before Done</Strong>. Publish.</Text></ListItem>
             </List>

@@ -277,7 +277,7 @@ const App = () => {
 
       {state.bypass && !state.bypass.resolvedAt && (
         <SectionMessage appearance="error" title={`This work item is in "${state.bypass.status}" with its privacy review still open`}>
-          <Text>It got past a Preflight gate without the review being complete (moved project, changed work type, a workflow without the gate, or the review went stale afterwards). The approvers have been told. Finish the steps below.</Text>
+          <Text>It got past a Preflight gate without the review being complete (moved from another space, changed work type, a workflow without the gate, or the review went stale afterwards). The approvers have been told. Finish the steps below.</Text>
         </SectionMessage>
       )}
 
@@ -295,8 +295,8 @@ const App = () => {
       )}
 
       {state.hasActiveRules && !state.gate && (
-        <SectionMessage appearance="warning" title="The Preflight gates have not run in this project yet">
-          <Text>Until a Jira admin attaches them to this project's workflow, moving work is not checked. Jira settings → Apps → Preflight → Setup.</Text>
+        <SectionMessage appearance="warning" title="The Preflight gates have not run in this space yet">
+          <Text>Until a Jira admin attaches them to this space's workflow, moving work is not checked. Jira settings → Apps → Preflight → Setup.</Text>
         </SectionMessage>
       )}
 

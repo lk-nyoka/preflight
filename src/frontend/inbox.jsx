@@ -113,7 +113,7 @@ const App = () => {
       )}
       {data.bypassed?.length > 0 && (
         <SectionMessage appearance="error" title={`Past a gate with the review open (${data.bypassed.length})`}>
-          <Text>These work items reached In Progress or Done while their privacy review was incomplete: moved from another project, changed work type, a workflow without the Preflight gate, or the review went stale afterwards.</Text>
+          <Text>These work items reached In Progress or Done while their privacy review was incomplete: moved from another space, changed work type, a workflow without the Preflight gate, or the review went stale afterwards.</Text>
           {table(data.bypassed, '')}
         </SectionMessage>
       )}

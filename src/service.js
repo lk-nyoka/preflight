@@ -420,7 +420,7 @@ export async function checkBypass({ workItem, result, record }) {
   }
   if (open && record.bypass.stage === stage) return record;
   const what = stage === 'build' ? 'review before build' : 'evidence before Done';
-  const event = `${workItem.key} is in "${workItem.status}" but its ${what} is still open: a gate was skipped (moved project, changed work type or a workflow without the validator) or the review went stale after the gate`;
+  const event = `${workItem.key} is in "${workItem.status}" but its ${what} is still open: a gate was skipped (moved from another space, changed work type or a workflow without the validator) or the review went stale after the gate`;
   const saved = await updateRecord(workItem.id, 'app', event, (rec) => {
     rec.bypass = { stage, status: workItem.status, at: Date.now(), resolvedAt: null };
   }, { via: 'engine' });

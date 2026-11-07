@@ -112,9 +112,9 @@ define('loadDemo', async (req) => {
     } catch (error) {
       if (/permission/i.test(error.message)) {
         throw new PreflightError(`Jira would not let Preflight create work items in ${projectKey}${created.length ? ` (created ${created.join(', ')} before stopping)` : ''}. ` +
-          'Apps act through the project role "atlassian-addons-project-access". In Project settings > Permissions, make sure "Create work items", ' +
+          'Apps act through the project role "atlassian-addons-project-access". In Space settings > Permissions, make sure "Create work items", ' +
           '"Browse projects", "Edit work items" and "Add comments" include that role and "Application access: Any logged in user". ' +
-          'In a team-managed project, set Access to Open, or use a company-managed project.');
+          'In a team-managed space, set Access to Open, or use a company-managed space.');
       }
       throw error;
     }
