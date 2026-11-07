@@ -60,7 +60,13 @@ const App = () => {
     `Triggers: ${(r.triggers?.keywords || []).join(', ') || '(none)'}`,
     ...((r.triggers?.contextual || []).map((g) => `Context: ${g.terms.join(', ')} with ${g.with.join(', ')}`)),
     ...(r.triggers?.exclude?.length ? [`Ignores: ${r.triggers.exclude.join(', ')}`] : []),
-    `Requirements: ${(r.requirements || []).map((q) => `${q.label} (${q.type === 'approval' ? 'approval' : q.stage || 'build'})`).join('; ')}`,
+    ...(r.triggers?.labels?.length ? [`Labels: ${r.triggers.labels.join(', ')}`] : []),
+    ...(r.requirements || []).map((q) => [
+      `• ${q.label} (${q.type === 'approval' ? 'approval' : `${q.type}, ${q.stage || 'build'}`})`,
+      q.options ? ` options: ${q.options.join(' | ')}` : '',
+      q.type === 'answer' ? ` at least ${q.minWords ?? 4} words` : '',
+      q.mustMention?.length ? ` must mention one of: ${q.mustMention.join(', ')}` : '',
+    ].join('')),
   ];
 
   return (

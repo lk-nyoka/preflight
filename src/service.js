@@ -44,20 +44,33 @@ export async function assess(issueIdOrKey, { asUser = true, persist = true, extr
   const [rules, settings, record] = await Promise.all([getRules(), getSettings(), getRecord(workItem.id)]);
   const opts = evalOptions(rules, settings);
   let result = evaluate(workItem, rules, record, opts);
-  const seen = extraText ? evaluate({ ...workItem, text: `${workItem.text}\n${extraText}` }, rules, record, opts) : result;
+  // Earlier wording is matched on its own (never joined to the live text, so the two cannot combine into a match neither made).
+  const earlier = extraText ? evaluate({ ...workItem, text: extraText, labels: [] }, rules, {}, opts).applicable : [];
 
-  // Remember rules that matched by phrase or label so rewording cannot remove them.
-  const newlyMatched = seen.applicable.filter((m) => !record.matched?.[m.ruleId] && (m.why.keywords.length || m.why.labels.length));
+  // Remember every rule AND every phrase that matched, so rewording cannot remove them or narrow an approval's scope.
+  const found = new Map();
+  for (const m of [...result.applicable, ...earlier]) {
+    const phrases = [...m.why.keywords, ...m.why.labels];
+    if (!phrases.length) continue;
+    const prev = found.get(m.ruleId);
+    found.set(m.ruleId, { ...m, phrases: [...new Set([...(prev?.phrases || []), ...phrases])] });
+  }
+  const newlyMatched = [...found.values()]
+    .map((m) => ({ ...m, phrases: m.phrases.filter((p) => !(record.matched?.[m.ruleId]?.phrases || []).includes(p)) }))
+    .filter((m) => m.phrases.length);
   if (newlyMatched.length && persist) {
     try {
       const saved = await updateRecord(
         workItem.id,
         'app',
-        `Matched ${newlyMatched.map((m) => `"${m.title}" (${[...m.why.keywords, ...m.why.labels].join(', ')})`).join('; ')}`,
+        `Matched ${newlyMatched.map((m) => `"${m.title}" (${m.phrases.join(', ')})`).join('; ')}`,
         (rec) => {
           rec.matched = rec.matched || {};
           for (const m of newlyMatched) {
-            rec.matched[m.ruleId] = { at: Date.now(), phrases: [...m.why.keywords, ...m.why.labels], ruleVersion: m.ruleVersion };
+            const prev = rec.matched[m.ruleId];
+            rec.matched[m.ruleId] = prev
+              ? { ...prev, phrases: [...new Set([...(prev.phrases || []), ...m.phrases])] }
+              : { at: Date.now(), phrases: m.phrases, ruleVersion: m.ruleVersion };
           }
         },
         { via: 'engine', ruleIds: newlyMatched.map((m) => m.ruleId) },
@@ -145,13 +158,14 @@ export function separationReason(settings, workItem, record, ruleId, accountId) 
   return null;
 }
 
-async function requireApprover(accountId, workItem, record = null, ruleId = null) {
+async function requireApprover(accountId, workItem, record = null, ruleId = null, { separation = true } = {}) {
   if (!(await canCurrentUserApprove(accountId))) {
     const mode = await approverMode();
     throw new PreflightError(
       mode === 'named-approvers' ? 'Only a named Preflight approver can do this.' : 'Only a Jira admin can do this in small-team mode.',
     );
   }
+  if (!separation) return;
   const settings = await getSettings();
   const reason = separationReason(settings, workItem, record, ruleId, accountId);
   if (reason) throw new PreflightError(`Separation of duties is on and ${reason}, so another approver must do this.`);
@@ -274,7 +288,7 @@ export async function approve(issueIdOrKey, ruleId, actor, note = '') {
 
 export async function revokeApproval(issueIdOrKey, ruleId, actor) {
   const { workItem } = await assess(issueIdOrKey);
-  await requireApprover(actor, workItem);
+  await requireApprover(actor, workItem, null, null, { separation: false }); // revoking only adds review
   await updateRecord(workItem.id, actor, `Revoked approval for ${ruleId}`, (rec) => {
     delete rec.approvals[ruleId];
   }, { ruleId });
@@ -308,7 +322,7 @@ export async function dismissRule(issueIdOrKey, ruleId, actor, reason) {
 
 export async function restoreRule(issueIdOrKey, ruleId, actor) {
   const { workItem } = await assess(issueIdOrKey);
-  await requireApprover(actor, workItem);
+  await requireApprover(actor, workItem, null, null, { separation: false });
   await updateRecord(workItem.id, actor, `Restored ${ruleId}`, (rec) => {
     delete rec.dismissals[ruleId];
   }, { ruleId });
@@ -336,7 +350,7 @@ export async function setException(issueIdOrKey, actor, reason, days = 30) {
 
 export async function clearException(issueIdOrKey, actor) {
   const { workItem } = await assess(issueIdOrKey);
-  await requireApprover(actor, workItem);
+  await requireApprover(actor, workItem, null, null, { separation: false });
   await updateRecord(workItem.id, actor, 'Exception withdrawn', (rec) => {
     rec.exception = null;
   });
@@ -393,8 +407,10 @@ export { draftRuleFromPolicy } from './governance.js';
 export async function checkBypass({ workItem, result, record }) {
   const category = workItem.statusCategory;
   let stage = null;
-  if (category === 'done' && result.status === 'blocked') stage = 'done';
-  else if ((category === 'indeterminate' || category === 'done') && result.stages.build.status === 'blocked') stage = 'build';
+  // Only open requirements of a matched rule count. A missing Yes/No/Unsure declaration on unrelated work is not a bypass.
+  const openIn = (s) => s.status === 'blocked' && s.open.length > 0;
+  if (category === 'done' && openIn(result.stages.done)) stage = 'done';
+  else if ((category === 'indeterminate' || category === 'done') && openIn(result.stages.build)) stage = 'build';
   const open = record.bypass && !record.bypass.resolvedAt;
   if (!stage) {
     if (!open) return record;

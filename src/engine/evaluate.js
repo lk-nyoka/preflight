@@ -157,7 +157,7 @@ function isUrl(value) {
 }
 
 /** Words and phrases that mean "no real answer yet", wherever they appear. */
-const NOT_AN_ANSWER = /\b(tbd|tbc|todo|to be (decided|confirmed|determined)|not sure|unsure|no idea|don ?t know|dunno|(this|it|that) later|figure (it|this) out|decide later|later on|asap|placeholder|lorem ipsum|test(ing)? answer|quick brown fox|see above|same as above|n\/a)\b/i;
+const NOT_AN_ANSWER = /\b(tbd|tbc|todo|to be (decided|confirmed|determined|agreed)|not sure yet|no idea|don ?t know|dunno|(this|it|that) later|figure (it|this) out|decide later|will update (this|it)|fill (this|it) in|placeholder|lorem ipsum|test(ing)? answer|quick brown fox|see above|same as above|n\/a)\b/i;
 /** Keyboard rows and runs typed to get past a word count. */
 const MASH = /^(asdf\w*|qwer\w*|zxcv\w*|uiop|hjkl|sdfg|wert|xcvb|dfgh|ghjk|fghj|yuio|tyui|vbnm|cvbn|azerty|abcd\w*|(\w)\2{2,}|blah|bla|lol|test|foo|bar|baz|xyz)$/i;
 
@@ -172,7 +172,8 @@ export function answerQuality(value, requirement = {}) {
   const minWords = requirement.minWords ?? 4;
   const words = text.split(/\s+/).filter((w) => /[a-z0-9]/i.test(w));
   const lower = words.map((w) => w.toLowerCase().replace(/[^a-z0-9]/g, ''));
-  if (/^(n\/?a|na|none|nothing|later|-+|\.+)$/i.test(text) || NOT_AN_ANSWER.test(text)) {
+  const plain = text.replace(/[’']/g, '');
+  if (/^(n\/?a|na|none|nothing|later|unsure|not sure|pending|-+|\.+)$/i.test(plain) || NOT_AN_ANSWER.test(plain)) {
     return 'Give a real answer: placeholders like "TBD", "not sure" or "later" do not count';
   }
   if (new Set(text.toLowerCase().replace(/[^a-z]/g, '')).size < 5) return 'Give a real answer, not filler text';
@@ -183,7 +184,7 @@ export function answerQuality(value, requirement = {}) {
   const must = requirement.mustMention || [];
   if (must.length) {
     const hay = normalise(text);
-    if (!must.some((m) => (m.startsWith('/') ? new RegExp(m.slice(1, -1), 'i').test(text) : hay.includes(normalise(m))))) {
+    if (!must.some((m) => normalise(m).trim() && hay.includes(normalise(m).trimEnd()))) {
       return requirement.mustMentionHint || `Mention ${must.slice(0, 4).join(', ')}…`;
     }
   }
@@ -199,7 +200,7 @@ function evaluateRequirement(rule, requirement, record, scope = []) {
     // Approvals without a recorded scope covered nothing in particular, so any phrase counts as new.
     const grown = scope.filter((p) => !(approval.scope || []).includes(p));
     if (grown.length) return { satisfied: false, reason: `The work item now also mentions "${grown.join('", "')}"; re-approval needed` };
-    if (rule.updatedAt && approval.at && rule.updatedAt > approval.at) {
+    if (rule.updatedAt && approval.at && rule.updatedAt >= approval.at) {
       return { satisfied: false, reason: 'The rule changed after this was approved; re-approval needed' };
     }
     if (approval.fingerprint && approval.fingerprint !== answersFingerprint(answers, rule)) {

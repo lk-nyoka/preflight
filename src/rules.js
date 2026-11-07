@@ -90,9 +90,11 @@ export function cleanRule(input, existing) {
 
 /** Human-readable warnings when a rule's triggers break its own examples. */
 export function exampleWarnings(rule) {
-  return checkExamples(rule).map((f) =>
+  const noApproval = (rule.requirements || []).some((r) => r.type === 'approval')
+    ? [] : ['No approval step: work that matches this rule can start without anyone signing off.'];
+  return noApproval.concat(checkExamples(rule).map((f) =>
     f.expected === 'match'
       ? `Should match but does not: "${f.text}"`
       : `Should not match but does ("${f.hits.join('", "')}"): "${f.text}"`,
-  );
+  ));
 }

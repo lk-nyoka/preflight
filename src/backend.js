@@ -7,7 +7,7 @@ import {
   assess, syncIndexes, proposeAnswer, requestApproval, flagRule, draftRuleFromPolicy, onIssueDeleted, declare, checkBypass, PreflightError,
 } from './service.js';
 import { adfToText, getDisplayName } from './jira.js';
-import { getRules, saveRules, getSettings, markGateSeen, appendAudit, listQueue } from './store.js';
+import { getRules, saveRules, getSettings, markGateSeen, appendAudit, listQueue, setQueueEntry } from './store.js';
 import { redact } from './engine/evaluate.js';
 import { POPIA_RULES, POPIA_PACK_ID } from './rulepacks/popia.js';
 
@@ -119,7 +119,9 @@ export async function onDaily({ budgetMs = 20000 } = {}) {
     try {
       await recheck(e.issueId);
     } catch (error) {
-      console.warn('Preflight daily resync skipped', e.key, error.message);
+      // A work item that no longer exists leaves the inbox; anything else is retried tomorrow.
+      if (/\((404|403)\)/.test(error.message)) await setQueueEntry(e.issueId, null).catch(() => {});
+      else console.warn('Preflight daily resync skipped', e.key, error.message);
     }
     done += 1;
   }
@@ -151,7 +153,12 @@ export async function onInstalled() {
  * instructions injected into one ticket cannot steer the agent to act on another.
  */
 const issueKeyFrom = (p) => p?.context?.jira?.issueKey || p?.context?.jira?.issueId || p?.issueKey || null;
-const actorFrom = (p, c) => c?.principal?.accountId || p?.context?.principal?.accountId || p?.context?.accountId || 'unknown-user';
+/** The signed-in user behind an agent call. Without one, actions that write are refused rather than attributed to nobody. */
+const actorFrom = (p, c) => {
+  const id = c?.principal?.accountId || p?.context?.principal?.accountId || p?.context?.accountId;
+  if (!id) throw new PreflightError('Preflight could not tell who is asking, so it will not record anything. Open the work item in Jira and use the Preflight panel.');
+  return id;
+};
 const fail = (message) => ({ ok: false, error: message });
 
 /**

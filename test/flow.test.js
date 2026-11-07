@@ -188,10 +188,15 @@ test('rewording does not open the gate; only an approver dismissal does', async 
 
 test('approval requests are rate limited', async () => {
   addIssue(8, 'Bulk SMS campaign to all customers');
-  const first = await backend.actionRequestApproval({ issueKey: 'PRIV-8' });
-  const second = await backend.actionRequestApproval({ issueKey: 'PRIV-8' });
+  const ctx = { principal: { accountId: 'dev-1' } };
+  const first = await backend.actionRequestApproval({ issueKey: 'PRIV-8' }, ctx);
+  const second = await backend.actionRequestApproval({ issueKey: 'PRIV-8' }, ctx);
   assert.equal(first.posted, true);
   assert.equal(second.posted, false);
+  // An agent call with no identifiable user records nothing.
+  const anon = await backend.actionRequestApproval({ issueKey: 'PRIV-8' });
+  assert.equal(anon.ok, false);
+  assert.match(anon.error, /could not tell who is asking/);
 });
 
 test('governance: named approvers lock approval, the approver list and active rules', async () => {

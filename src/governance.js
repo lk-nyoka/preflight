@@ -89,7 +89,8 @@ export function diff(before, after) {
     for (const o of removed(old.options, q.options)) note(`requirement "${q.label}": − option "${o}"`);
     const [mb, ma] = [old.minWords ?? 4, q.minWords ?? 4];
     if (mb !== ma) note(`requirement "${q.label}": minimum words ${mb} → ${ma}`, ma < mb);
-    if (JSON.stringify(old.mustMention || []) !== JSON.stringify(q.mustMention || [])) note(`requirement "${q.label}": required wording changed`, (q.mustMention || []).length < (old.mustMention || []).length);
+    for (const w of added(old.mustMention, q.mustMention)) note(`requirement "${q.label}": answers may now mention "${w}" instead`, true);
+    for (const w of removed(old.mustMention, q.mustMention)) note(`requirement "${q.label}": answers can no longer rely on "${w}"`, (q.mustMention || []).length === 0);
   }
   for (const [id, q] of rb) if (!ra.has(id)) note(`− requirement ${describeReq(q)}`, true);
 
@@ -387,9 +388,9 @@ export async function requireApproverForBulk(actor) {
  *   status "active" (Load demo): activates pack rules. Rules someone has edited
  *     keep their edits, and pending proposals are kept.
  *   status "draft" (Restore drafts): only allowed while no pack rule is active,
- *     so a bulk action can never switch enforcement off in one click. Deactivate
- *     active rules one by one (each needs a reason and, with approvers named, a
- *     second person).
+ *     so a bulk action can never switch enforcement off in one click. Active rules
+ *     are deactivated one by one, each with a reason in the audit log (a Jira admin
+ *     who is not an approver can only propose it).
  * Every rule's before and after state goes to the audit log.
  */
 export const replacePack = locked(async (packRules, packPrefix, status, actor) => {

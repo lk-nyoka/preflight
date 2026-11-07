@@ -47,7 +47,7 @@ const LAWFUL_BASIS = [
 
 /** A retention answer must say when the data goes: a period or the event that ends it. */
 const ENDS = {
-  mustMention: ['day', 'week', 'month', 'year', 'hour', 'closure', 'closed', 'close', 'delete', 'deletion', 'until', 'after', 'end', 'expire', 'expiry', 'cancel', 'terminat', 'withdraw', 'opt out', 'unsubscribe', 'leave', 'resign'],
+  mustMention: ['day', 'week', 'month', 'year', 'hour', 'closure', 'closed', 'close', 'delete', 'deletion', 'until', 'after', 'end', 'expire', 'expiry', 'cancel', 'terminat', 'withdraw', 'opt out', 'unsubscribe', 'leave', 'resign', 'stop', 'no longer', 'once'],
   mustMentionHint: 'Say when it is deleted: a period (e.g. 5 years) or the event that ends it (e.g. account closure)',
 };
 
@@ -322,7 +322,7 @@ export const POPIA_RULES = [
       labels: ['cross-border'],
     },
     requirements: [
-      { id: 'destination', label: 'Destination country and recipient', type: 'answer', stage: 'build', clause: 's72' },
+      { id: 'destination', label: 'Destination country and recipient', type: 'answer', stage: 'build', clause: 's72', minWords: 2 },
       {
         id: 'ground',
         label: 'Section 72 ground relied on',
@@ -380,7 +380,7 @@ export const DEMO_ISSUES = [
   {
     summary: 'Add SA ID number field to customer signup',
     description:
-      'Compliance asked us to capture the customer SA ID number during signup so support can verify callers. Add a required field to the signup form and store it on the customer record.',
+      'Compliance asked us to capture the customer SA ID number during signup so support can verify callers. Add a required field to the signup form and save it with the new account.',
   },
   {
     summary: 'Store learner allergy and medical notes for school trip bookings',

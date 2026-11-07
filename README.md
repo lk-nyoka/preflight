@@ -66,8 +66,9 @@ keyword matching is only the first net. The panel offers *Add a rule*, and the o
 this change affect personal information? Yes / No / Unsure" on every work item before work starts.
 
 **Matches are sticky.** Once a rule matches, rewording the ticket does not remove it. Preflight also checks the
-wording carried by the create and edit events and the wording seen when someone tries to start work, so text that was
-live for only a few seconds still counts. Only an approver can dismiss a match, with a reason of at least 10
+summary and description carried by the create and edit events and the wording seen when someone tries to start work,
+so text that was live for only a few seconds still counts, including new phrases for a rule that already matched (they
+widen what the approval must cover). Labels that were added and removed between checks are not remembered. Only an approver can dismiss a match, with a reason of at least 10
 characters, and a dismissal covers only the phrases it was given for. Limitation: a *cloned* work item starts with no
 history, so it is judged on its own wording.
 
@@ -75,17 +76,18 @@ history, so it is judged on its own wording.
 
 | Role | Can |
 |---|---|
-| Anyone who can see the work item | Answer questions, confirm Rovo drafts, request approval, add a rule, declare Yes / Unsure. Declaring No, or lowering a declaration someone else raised, needs an approver |
+| Anyone who can see the work item | Answer questions, confirm Rovo drafts, request approval, add a rule, declare Yes / Unsure / No. Lowering a declaration that someone else raised (Yes → Unsure → No, in one step or several) needs an approver |
 | Rovo agent | Explain, propose drafts, request approval, declare *yes* or *unsure*, flag a rule, draft rules (admins). **Never**: approve, dismiss, grant exceptions, activate rules, declare *no*, or make a draft count |
 | Named approver | Approve, dismiss with a reason, grant an exception (max 90 days), change the approver list and settings, decide proposed rule changes (not their own), cancel a reset |
 | Jira admin | Install and configure. In **small-team mode** (no named approvers) also approves and edits rules directly. Once approvers are named: edits, activation and deactivation of active rules become *proposals*; can strengthen settings but not weaken them; cannot approve or add themselves as approver; can request a break-glass reset (below) |
 
-**Every rule needs a named approver's sign-off before work starts.** The answers are the team's; the approval is the
-Information Officer's (or, in small-team mode, a Jira admin's). Optional **separation of duties** stops the reporter,
+**Every starter rule needs a named approver's sign-off before work starts.** The answers are the team's; the approval
+is the Information Officer's (or, in small-team mode, a Jira admin's). A custom rule without an approval step shows a
+warning in the editor. Optional **separation of duties** stops the reporter,
 the assignee and anyone who answered the questions from approving.
 
-**Answers must be real answers.** Placeholders ("TBD", "not sure", "we'll do this later"), keyboard filler and repeated
-words are rejected, and a retention answer must say when the data goes (a period or the event that ends it). This
+**Answers must be real answers.** Obvious placeholders ("TBD", "I don't know yet", "we'll do this later"), keyboard
+filler and repeated words are rejected, and a retention answer must say when the data goes (a period or the event that ends it). This
 raises the floor; it cannot judge whether an answer is *true*, which is the approver's job.
 
 **When an approval goes stale:** an answer it covered (any *before work starts* answer) changes; an edit to the rule
@@ -95,8 +97,8 @@ something the approver did not see. Adding *before Done* evidence does not affec
 **Exceptions** are time-limited (at most 90 days) and cover only the rules that were open, and the wording they
 matched, when the exception was granted. New rules or new wording are not waived.
 
-**Governing the rules.** With approvers named, a change to an active rule waits in the approver's inbox as a
-proposal. The approver sees every field that changed, with anything that makes the rule match less or ask for less
+**Governing the rules.** With approvers named, a change to an active rule by a Jira admin who is not an approver waits
+in the approver's inbox as a proposal (an approver's own changes apply directly and are audited). The approver sees every field that changed, with anything that makes the rule match less or ask for less
 (removed phrases, new excludes, removed labels, loosened context, added options, lowered word counts, removed or
 moved requirements) listed first as *weakens*, the rule's examples re-run against the new version, and the full rule
 after the change. Bulk actions cannot switch enforcement off: the starter pack can only be restored as drafts while
@@ -170,11 +172,10 @@ forge install --product jira --site <your-site>.atlassian.net
 Then: **Jira settings → Apps → Preflight → Setup → Load demo**, attach both gates, and drag *Add SA ID number field to
 customer signup* to In Progress.
 
-`npm test` runs 63 tests: the engine, the matcher regression corpus (including all three blind-test sets), end-to-end
+`npm test` runs 72 tests: the engine, the matcher regression corpus (including all three blind-test sets), end-to-end
 flows with Jira and storage faked (two-stage gating, stale approvals, sticky matches, drafts that don't count,
 governance of approvers and active rules, write-once audit, locks, exception expiry, rate limiting, fail-closed,
-deletion, coverage), and one regression test for each hole found in the second independent audit
-(`test/exploits.test.js`). They do not replace testing real transitions on a developer site.
+deletion, coverage), and regression tests for the holes found by the independent audits (`test/exploits.test.js`). They do not replace testing real transitions on a developer site.
 
 Sharing with judges: `forge deploy -e production`, then create an installation link in the
 [Developer Console](https://developer.atlassian.com/console/myapps/) (*Distribution → Start sharing*).
