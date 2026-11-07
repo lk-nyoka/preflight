@@ -146,6 +146,7 @@ const App = () => {
   const [projectKey, setProjectKey] = useState('');
   const [coverage, setCoverage] = useState(null);
   const [resetReason, setResetReason] = useState('');
+  const [approverDraft, setApproverDraft] = useState(null);
 
   const call = async (name, payload = {}) => {
     setBusy(true);
@@ -238,7 +239,7 @@ const App = () => {
               <Stack space="space.100">
                 {unprotected.length
                   ? <SectionMessage appearance="warning" title={`${unprotected.length} transition(s) are not protected`}><Text>Work can reach these statuses without a Preflight check.</Text></SectionMessage>
-                  : <SectionMessage appearance="success" title="Every In Progress and Done transition found has its Preflight gate" />}
+                  : <SectionMessage appearance="success" title={`All ${coverage.coverage.length} In Progress and Done transitions in ${coverage.workflows} workflow(s) have their gate`} />}
                 <DynamicTable
                   head={{ cells: ['Workflow', 'Transition', 'Gate', 'Status'].map((c, i) => ({ key: `h${i}`, content: c })) }}
                   rows={coverage.coverage.map((r, i) => ({
@@ -269,7 +270,10 @@ const App = () => {
             {state.pending.length > 0 && (
               <SectionMessage appearance="information" title={`${state.pending.length} change(s) waiting for an approver`}>
                 {state.pending.map((p) => (
-                  <Text key={p.ruleId}>{p.title}: {p.kind}{p.change ? ` (${p.change})` : ''}, proposed {when(p.at)}</Text>
+                  <Inline key={p.ruleId} space="space.100" alignBlock="center" shouldWrap>
+                    <Text>{p.title}: {p.kind}{p.diff ? ` (${p.diff.summary})` : ''}, proposed {when(p.at)}</Text>
+                    {p.by === state.me && <Button appearance="subtle" isDisabled={busy} onClick={() => call('withdrawProposal', { id: p.ruleId })}>Withdraw</Button>}
+                  </Inline>
                 ))}
                 <Text><Em>Approvers decide these under Apps → Preflight reviews. The current version keeps enforcing until then.</Em></Text>
               </SectionMessage>
@@ -342,19 +346,29 @@ const App = () => {
               {approverLocked ? (
                 <Inline space="space.100" shouldWrap>{state.settings.approverAccountIds.map((id) => <User key={id} accountId={id} />)}</Inline>
               ) : (
-                <UserPicker name="approvers" label="Approvers" isMulti defaultValue={state.settings.approverAccountIds}
-                  onChange={(users) => {
-                    const list = (Array.isArray(users) ? users : users ? [users] : []).map((u) => u.id).filter(Boolean);
-                    call('saveSettings', { approverAccountIds: list });
-                  }} />
+                <Stack space="space.100">
+                  <UserPicker name="approvers" label="Approvers" isMulti defaultValue={state.settings.approverAccountIds}
+                    onChange={(users) => setApproverDraft((Array.isArray(users) ? users : users ? [users] : []).map((u) => u.id).filter(Boolean))} />
+                  <Inline><Button appearance="primary" isDisabled={!approverDraft || busy} onClick={() => call('saveSettings', { approverAccountIds: approverDraft })}>Save approvers</Button></Inline>
+                  <Text><Em>Tip: name your Information Officer, not yourself. Once saved, only an approver can change this list.</Em></Text>
+                </Stack>
               )}
               {approverLocked && (
                 <Stack space="space.050">
-                  <Text><Em>Only a current approver can change this list. If your approver has left, reset to small-team mode (recorded in the audit log).</Em></Text>
-                  <Inline space="space.100" alignBlock="center">
-                    <Textfield id="reset-reason" value={resetReason} placeholder="Reason" onChange={(e) => setResetReason(e.target.value)} />
-                    <Button appearance="warning" isDisabled={resetReason.trim().length < 10 || busy} onClick={() => call('resetApprovers', { reason: resetReason })}>Reset to small-team mode</Button>
-                  </Inline>
+                  <Text><Em>Only a current approver can change this list, or the settings that weaken a control (they can do it under Apps → Preflight reviews).</Em></Text>
+                  {state.settings.pendingReset ? (
+                    <SectionMessage appearance="warning" title="Reset pending">
+                      <Text>Takes effect {when(state.settings.pendingReset.effectiveAt)} unless an approver cancels it.</Text>
+                    </SectionMessage>
+                  ) : (
+                    <Stack space="space.050">
+                      <Text>If your approver has left, request a break-glass reset. It takes effect after 72 hours, any approver can cancel it, and you cannot name yourself approver afterwards.</Text>
+                      <Inline space="space.100" alignBlock="center">
+                        <Textfield id="reset-reason" value={resetReason} placeholder="Reason" onChange={(e) => setResetReason(e.target.value)} />
+                        <Button appearance="warning" isDisabled={resetReason.trim().length < 10 || busy} onClick={() => call('requestReset', { reason: resetReason })}>Request reset</Button>
+                      </Inline>
+                    </Stack>
+                  )}
                 </Stack>
               )}
             </Stack>

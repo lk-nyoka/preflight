@@ -174,6 +174,7 @@ test('Rovo can only propose; a draft never satisfies a requirement', async () =>
 
 test('rewording does not open the gate; only an approver dismissal does', async () => {
   addIssue(7, 'Capture passport number at checkout');
+  await backend.onIssueChanged({ issue: { id: '10007' } }); // create trigger records the match
   assert.equal((await backend.validateBuild({ issue: { id: '10007' } })).result, false);
   issues['PRIV-7'].text = 'Capture a document reference at checkout';
   assert.equal((await backend.validateBuild({ issue: { id: '10007' } })).result, false);
@@ -211,16 +212,27 @@ test('governance: named approvers lock approval, the approver list and active ru
   addIssue(9, 'Store customer ID numbers');
   assert.equal((await backend.validateBuild({ issue: { id: '10009' } })).result, false, 'old version still enforced');
 
+  // Only one proposal at a time; the proposer can withdraw it.
+  const second = await admin('setRuleStatus', { id: 'popia-identifiers', status: 'draft', reason: 'Testing the governance flow' });
+  assert.equal(second.ok, false);
+  assert.match(second.error, /already waiting/);
+  const firstProposal = (await governance.pendingRuleChanges())[0];
+  assert.ok(firstProposal.diff.phrasesRemoved.length > 0, 'approver sees what the edit removes');
+  assert.equal(firstProposal.diff.weakens, true);
+  await admin('withdrawProposal', { id: 'popia-identifiers' });
+
   // Deactivating needs a reason and, in named mode, an approver's decision.
   const noReason = await admin('setRuleStatus', { id: 'popia-identifiers', status: 'draft' });
   assert.equal(noReason.ok, false);
   const proposal = await admin('setRuleStatus', { id: 'popia-identifiers', status: 'draft', reason: 'Testing the governance flow' });
-  assert.equal(proposal.ok, true);
+  assert.equal(proposal.ok, true, proposal.error);
   assert.equal((await store_.getRules()).find((r) => r.id === 'popia-identifiers').status, 'active');
+  const pending = (await governance.pendingRuleChanges())[0];
 
-  // The approver decides; the proposer cannot decide their own proposal.
-  await assert.rejects(governance.decideRuleChange('popia-identifiers', 'apply', 'admin-1'), /named approver/);
-  await governance.decideRuleChange('popia-identifiers', 'reject', 'io-1');
+  // The proposer cannot decide; a stale proposal id is refused; the approver decides the exact proposal.
+  await assert.rejects(governance.decideRuleChange('popia-identifiers', pending.proposalId, 'apply', 'admin-1'), /named approver/);
+  await assert.rejects(governance.decideRuleChange('popia-identifiers', 'stale-id', 'apply', 'io-1'), /changed after you opened it/);
+  await governance.decideRuleChange('popia-identifiers', pending.proposalId, 'reject', 'io-1');
   assert.equal((await store_.getRules()).find((r) => r.id === 'popia-identifiers').pending, null);
 
   // Weakening fail-closed needs an approver.
@@ -231,6 +243,41 @@ test('governance: named approvers lock approval, the approver list and active ru
   assert.ok(log.some((e) => /Rejected/.test(e.event)));
 });
 
+test('exploit A blocked: an admin cannot reset and then name themselves', async () => {
+  as('admin-1');
+  const req = await admin('requestReset', { reason: 'Information Officer has left the company' });
+  assert.equal(req.ok, true, req.error);
+  assert.equal((await store_.getSettings()).approverAccountIds.length, 1, 'nothing changes during the waiting period');
+  // An approver can cancel it.
+  await governance.cancelReset('io-1');
+  assert.equal((await store_.getSettings()).pendingReset, null);
+  // Let a reset mature, then try to self-appoint.
+  await admin('requestReset', { reason: 'Information Officer has left the company' });
+  const s = await store_.getSettings();
+  store.set('settings', { ...s, pendingReset: { ...s.pendingReset, effectiveAt: Date.now() - 1 } });
+  await governance.applyDueReset();
+  assert.deepEqual((await store_.getSettings()).approverAccountIds, []);
+  await assert.rejects(governance.setApprovers(['admin-1'], 'admin-1'), /cannot name yourself/);
+  await governance.setApprovers(['io-1'], 'admin-1');
+  assert.deepEqual((await store_.getSettings()).approverAccountIds, ['io-1']);
+  assert.ok((await store_.listAudit('admin')).some((e) => /Reset to small-team mode took effect/.test(e.event)));
+});
+
+test('exploit B blocked: a draft cannot be renamed onto an active rule and delete it', async () => {
+  as('admin-1');
+  const rules = await store_.getRules();
+  const draft = { id: 'scratch-draft', title: 'Scratch', keywords: 'scratch phrase', requirements: JSON.stringify([{ id: 'a', label: 'Why', type: 'answer' }]) };
+  store.set('settings', { ...(await store_.getSettings()), approverAccountIds: [] });
+  assert.equal((await admin('saveRule', { originalId: null, rule: draft })).ok, true);
+  store.set('settings', { ...(await store_.getSettings()), approverAccountIds: ['io-1'] });
+  const rename = await admin('saveRule', { originalId: 'scratch-draft', rule: { ...draft, id: 'popia-children' } });
+  assert.equal(rename.ok, false);
+  assert.match(rename.error, /cannot be changed/);
+  assert.equal(rules.filter((r) => r.id === 'popia-children').length, 1);
+  const del = await admin('deleteRule', { id: 'popia-children' });
+  assert.equal(del.ok, false);
+});
+
 test('only drafts can be deleted', async () => {
   as('admin-1');
   const out = await admin('deleteRule', { id: 'popia-children' });
@@ -238,10 +285,14 @@ test('only drafts can be deleted', async () => {
   assert.match(out.error, /Deactivate/);
 });
 
-test('separation of duties blocks the reporter even if they are an approver', async () => {
-  store.set('settings', { ...(await store_.getSettings()), approverAccountIds: ['dev-1'], separationOfDuties: true });
+test('separation of duties blocks the reporter and whoever answered', async () => {
+  store.set('settings', { ...(await store_.getSettings()), approverAccountIds: ['dev-1', 'dev-2'], separationOfDuties: true });
   as('dev-1');
   await assert.rejects(service.approve('PRIV-9', 'popia-identifiers', 'dev-1'), /Separation of duties/);
+  addIssue(14, 'Store customer ID numbers in the CRM', { reporterAccountId: 'someone-else' });
+  as('dev-2');
+  await service.saveAnswers('PRIV-14', 'popia-identifiers', goodAnswers, 'dev-2');
+  await assert.rejects(service.approve('PRIV-14', 'popia-identifiers', 'dev-2'), /you answered/);
   store.set('settings', { ...(await store_.getSettings()), approverAccountIds: ['io-1'], separationOfDuties: false });
 });
 
@@ -275,6 +326,19 @@ test('Rovo drafts rules only as drafts and only for admins', async () => {
   assert.equal(saved.ok, true, saved.error);
   assert.equal((await store_.getRules()).find((r) => r.id === saved.ruleId).status, 'draft');
   assert.equal((await backend.actionDraftRule({ ...draft, requirements: 'not json' })).ok, false);
+});
+
+test('only an approver can overrule someone else\'s "unsure" with "no"', async () => {
+  addIssue(13, 'Tweak the profile page copy');
+  as('dev-2');
+  await service.declare('PRIV-13', 'unsure', 'dev-2');
+  as('dev-1');
+  await assert.rejects(service.declare('PRIV-13', 'no', 'dev-1'), /approver/);
+});
+
+test('the agent prefers the work item in context over a key in the payload', async () => {
+  const out = await backend.actionCheckIssue({ issueKey: 'PRIV-5', context: { jira: { issueKey: 'PRIV-1' } } });
+  assert.equal(out.issueKey, 'PRIV-1');
 });
 
 test('the agent can declare yes/unsure (adds review) but never "no"', async () => {

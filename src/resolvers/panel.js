@@ -65,7 +65,7 @@ const me = (req) => req.context.accountId;
 
 define('getState', async (req) => {
   const state = await assess(issueFrom(req));
-  syncIndexes(state.workItem, state.result).catch(() => {});
+  await syncIndexes(state.workItem, state.result).catch(() => {});
   return view(state, me(req));
 });
 

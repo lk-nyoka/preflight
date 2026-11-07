@@ -16,6 +16,7 @@ import {
 } from './store.js';
 import { getWorkItem, currentUserIsJiraAdmin, setPreflightProperty, getPreflightProperty, addComment } from './jira.js';
 import { PreflightError } from './errors.js';
+import { kvs } from '@forge/kvs';
 import { DECLARATION_RULE_ID } from './rulepacks/popia.js';
 
 export { PreflightError };
@@ -30,7 +31,7 @@ export function evalOptions(rules, settings) {
 }
 
 /** Load work item, rules, settings and evidence, and run the engine. */
-export async function assess(issueIdOrKey, { asUser = true } = {}) {
+export async function assess(issueIdOrKey, { asUser = true, persist = true } = {}) {
   const workItem = await getWorkItem(issueIdOrKey, { asUser });
   const [rules, settings, record] = await Promise.all([getRules(), getSettings(), getRecord(workItem.id)]);
   const opts = evalOptions(rules, settings);
@@ -38,7 +39,7 @@ export async function assess(issueIdOrKey, { asUser = true } = {}) {
 
   // Remember rules that matched by phrase or label so rewording cannot remove them.
   const newlyMatched = result.applicable.filter((m) => !record.matched?.[m.ruleId] && (m.why.keywords.length || m.why.labels.length));
-  if (newlyMatched.length) {
+  if (newlyMatched.length && persist) {
     try {
       const saved = await updateRecord(
         workItem.id,
@@ -77,7 +78,7 @@ export async function syncIndexes(workItem, result) {
     current.awaiting !== next.awaiting || current.rules?.join() !== next.rules.join();
   if (changed) await setPreflightProperty(workItem.id, { ...next, evaluatedAt: Date.now() });
 
-  const reviewOpen = result.status === 'blocked' || result.stages.build.status === 'blocked';
+  const reviewOpen = ['blocked', 'exception'].includes(result.status) || result.stages.build.status === 'blocked';
   await setQueueEntry(
     workItem.id,
     reviewOpen
@@ -86,7 +87,8 @@ export async function syncIndexes(workItem, result) {
           key: workItem.key,
           summary: redact(workItem.summary).slice(0, 200),
           projectKey: workItem.projectKey,
-          awaitingApproval: result.awaitingApproval,
+          awaitingApproval: result.awaitingApproval && result.status !== 'exception',
+          exception: result.status === 'exception' ? { expiresAt: null } : null,
           buildStatus: result.stages.build.status,
           openBuild: result.stages.build.open.length,
           openTotal: result.openCount,
@@ -96,6 +98,14 @@ export async function syncIndexes(workItem, result) {
       : null,
   );
   return changed;
+}
+
+/** Simple sliding-window counter in KVS (used to stop agents spamming approval requests). */
+async function rateLimit(key, max, windowMs, message) {
+  const now = Date.now();
+  const hits = ((await kvs.get(key)) || []).filter((t) => t > now - windowMs);
+  if (hits.length >= max) throw new PreflightError(message);
+  await kvs.set(key, [...hits, now], { ttl: { value: Math.ceil(windowMs / 1000), unit: 'SECONDS' } });
 }
 
 /* ---------------- who may approve ---------------- */
@@ -112,7 +122,7 @@ export async function canCurrentUserApprove(accountId) {
   return currentUserIsJiraAdmin();
 }
 
-async function requireApprover(accountId, workItem) {
+async function requireApprover(accountId, workItem, record = null, ruleId = null) {
   if (!(await canCurrentUserApprove(accountId))) {
     const mode = await approverMode();
     throw new PreflightError(
@@ -120,8 +130,12 @@ async function requireApprover(accountId, workItem) {
     );
   }
   const settings = await getSettings();
-  if (settings.separationOfDuties && workItem?.reporterAccountId === accountId) {
-    throw new PreflightError('Separation of duties is on: the reporter of a work item cannot approve it.');
+  if (settings.separationOfDuties) {
+    if (workItem?.reporterAccountId === accountId || workItem?.assigneeAccountId === accountId) {
+      throw new PreflightError('Separation of duties is on: the reporter or assignee of a work item cannot approve it.');
+    }
+    const authors = Object.values(record?.answers?.[ruleId] || {}).map((a) => a.by);
+    if (authors.includes(accountId)) throw new PreflightError('Separation of duties is on: you answered these questions, so another approver must approve.');
   }
 }
 
@@ -198,7 +212,12 @@ export async function discardDraft(issueIdOrKey, ruleId, requirementId, actor) {
 /** Yes / No / Unsure: does this change affect personal information? */
 export async function declare(issueIdOrKey, value, actor, via = 'panel') {
   if (!['yes', 'no', 'unsure'].includes(value)) throw new PreflightError('Choose Yes, No or Unsure.');
-  const { workItem } = await assess(issueIdOrKey);
+  const { workItem, record } = await assess(issueIdOrKey);
+  const current = record.declaration?.value;
+  if (value === 'no' && (current === 'yes' || current === 'unsure') && record.declaration.by !== actor) {
+    // Someone else said this work affects personal information; only an approver can overrule that.
+    await requireApprover(actor, workItem);
+  }
   await updateRecord(workItem.id, actor, `Declared personal information impact: ${value}`, (rec) => {
     rec.declaration = { value, by: actor, at: Date.now(), via };
   }, { via });
@@ -209,7 +228,7 @@ export async function declare(issueIdOrKey, value, actor, via = 'panel') {
 
 export async function approve(issueIdOrKey, ruleId, actor, note = '') {
   const { workItem, record, rules, result } = await assess(issueIdOrKey);
-  await requireApprover(actor, workItem);
+  await requireApprover(actor, workItem, record, ruleId);
   const match = findApplicable(result, ruleId);
   const unanswered = match.requirements.filter((r) => r.type !== 'approval' && r.stage === 'build' && !r.satisfied);
   if (unanswered.length) throw new PreflightError(`Answer these first: ${unanswered.map((r) => r.label).join(', ')}.`);
@@ -219,9 +238,11 @@ export async function approve(issueIdOrKey, ruleId, actor, note = '') {
   await updateRecord(
     workItem.id,
     actor,
-    `Approved "${match.title}"${note ? `: ${note}` : ''}`,
+    `Approved "${match.title}" (covers: ${match.scope.join(', ') || 'flagged'})${note ? `: ${redact(note)}` : ''}`,
     (rec) => {
-      rec.approvals[ruleId] = { by: actor, at: Date.now(), fingerprint, ruleVersion: rule.updatedAt || null, note: String(note).slice(0, 500) };
+      rec.approvals[ruleId] = {
+        by: actor, at: Date.now(), fingerprint, ruleVersion: rule.updatedAt || null, scope: match.scope, note: redact(String(note)).slice(0, 500),
+      };
     },
     { ruleId, ruleVersion: rule.updatedAt || null },
   );
@@ -255,8 +276,8 @@ export async function dismissRule(issueIdOrKey, ruleId, actor, reason) {
   const { workItem, result } = await assess(issueIdOrKey);
   await requireApprover(actor, workItem);
   const match = findApplicable(result, ruleId);
-  await updateRecord(workItem.id, actor, `Dismissed "${match.title}": ${reason}`, (rec) => {
-    rec.dismissals[ruleId] = { by: actor, at: Date.now(), reason: String(reason).slice(0, 500) };
+  await updateRecord(workItem.id, actor, `Dismissed "${match.title}" for "${match.scope.join('", "')}": ${redact(reason)}`, (rec) => {
+    rec.dismissals[ruleId] = { by: actor, at: Date.now(), reason: redact(String(reason)).slice(0, 500), phrases: match.scope };
     rec.manual = (rec.manual || []).filter((id) => id !== ruleId);
   }, { ruleId });
   return refresh(workItem.id);
@@ -275,11 +296,15 @@ export async function restoreRule(issueIdOrKey, ruleId, actor) {
 export async function setException(issueIdOrKey, actor, reason, days = 30) {
   if (String(reason || '').trim().length < 10) throw new PreflightError('Give a reason (at least 10 characters) for the exception.');
   const validDays = Math.min(90, Math.max(1, Math.round(Number(days) || 30)));
-  const { workItem } = await assess(issueIdOrKey);
+  const { workItem, result } = await assess(issueIdOrKey);
   await requireApprover(actor, workItem);
+  // Scope: only the rules that are open right now. Rules that match later are not waived.
+  const ruleIds = [...new Set(result.open.map((o) => o.ruleId))];
+  if (!ruleIds.length) throw new PreflightError('Nothing is open, so there is nothing to grant an exception for.');
+  const titles = result.applicable.filter((m) => ruleIds.includes(m.ruleId)).map((m) => m.title);
   const expiresAt = Date.now() + validDays * 24 * 60 * 60 * 1000;
-  await updateRecord(workItem.id, actor, `Exception granted for ${validDays} day(s): ${reason}`, (rec) => {
-    rec.exception = { by: actor, at: Date.now(), reason: String(reason).slice(0, 500), expiresAt };
+  await updateRecord(workItem.id, actor, `Exception granted for ${validDays} day(s) covering ${titles.join(', ')}: ${redact(reason)}`, (rec) => {
+    rec.exception = { by: actor, at: Date.now(), reason: redact(String(reason)).slice(0, 500), expiresAt, ruleIds };
   });
   return refresh(workItem.id);
 }
@@ -303,6 +328,7 @@ export async function requestApproval(issueIdOrKey, actor, message = '', via = '
   if (since < APPROVAL_REQUEST_COOLDOWN_MS) {
     return { posted: false, reason: `Approval was already requested ${Math.round(since / 60000)} minute(s) ago. Try again later.` };
   }
+  if (via !== 'panel') await rateLimit(`rl:approval:${actor}`, 10, 60 * 60 * 1000, 'You have requested a lot of approvals in the last hour. Try again later.');
   const settings = await getSettings();
   const mentions = settings.approverAccountIds.slice(0, 5).flatMap((id) => [{ type: 'mention', attrs: { id } }, { type: 'text', text: ' ' }]);
   const lines = result.open.map((o) => `• ${o.ruleTitle} (${o.ruleClause}): ${o.label}, ${o.reason.toLowerCase()}`);

@@ -35,10 +35,12 @@ export const GLOBAL_EXCLUDES = [
 
 /** Very small stemmer: plurals and a few suffixes, so "ID numbers" matches "id number". */
 export function stem(word) {
-  let w = word;
+  const w = word;
+  if (w.length <= 3 && w !== 'ids') return w; // keep gps, sms, kyc, pii as they are
+  if (/(oses|yses|eses)$/.test(w)) return `${w.slice(0, -2)}is`; // diagnoses -> diagnosis, analyses -> analysis
   if (w.length > 4 && w.endsWith('ies')) return `${w.slice(0, -3)}y`;
-  if (w.length > 4 && /(ses|xes|zes|ches|shes)$/.test(w)) return w.slice(0, -2);
-  if (w.length >= 3 && w.endsWith('s') && !/(ss|us|is)$/.test(w)) w = w.slice(0, -1);
+  if (w.length > 4 && /(sses|xes|zes|ches|shes)$/.test(w)) return w.slice(0, -2);
+  if (w.endsWith('s') && !/(ss|us|is)$/.test(w)) return w.slice(0, -1);
   return w;
 }
 
@@ -166,11 +168,14 @@ export function answerQuality(value, requirement = {}) {
   return null;
 }
 
-function evaluateRequirement(rule, requirement, record) {
+function evaluateRequirement(rule, requirement, record, scope = []) {
   const answers = record.answers?.[rule.id] || {};
   if (requirement.type === 'approval') {
     const approval = record.approvals?.[rule.id];
     if (!approval) return { satisfied: false, reason: 'Waiting for an approver' };
+    // Scope growth: the ticket now mentions something the approver did not see.
+    const grown = approval.scope ? scope.filter((p) => !approval.scope.includes(p)) : [];
+    if (grown.length) return { satisfied: false, reason: `The work item now also mentions "${grown.join('", "')}"; re-approval needed` };
     if (rule.updatedAt && approval.at && rule.updatedAt > approval.at) {
       return { satisfied: false, reason: 'The rule changed after this was approved; re-approval needed' };
     }
@@ -242,11 +247,16 @@ export function evaluate(workItem, rules = [], record = {}, opts = {}) {
     };
 
     const dismissal = record.dismissals?.[rule.id];
-    if (dismissal) {
+    // A dismissal covers only the phrases it was given for. New phrases for the rule re-open it.
+    const newSinceDismissal = dismissal ? [...keywords, ...labelHits].filter((p) => !(dismissal.phrases || []).includes(p)) : [];
+    if (dismissal && !newSinceDismissal.length) {
       dismissed.push({ ...match, dismissal });
       continue;
     }
+    if (dismissal) match.why.reopened = newSinceDismissal;
 
+    const scope = [...new Set([...keywords, ...labelHits, ...(record.matched?.[rule.id]?.phrases || [])])].sort();
+    match.scope = scope;
     match.requirements = (rule.requirements || []).map((req) => ({
       id: req.id,
       label: req.label,
@@ -255,7 +265,7 @@ export function evaluate(workItem, rules = [], record = {}, opts = {}) {
       help: req.help || null,
       options: req.options || null,
       clause: req.clause || null,
-      ...evaluateRequirement(rule, req, record),
+      ...evaluateRequirement(rule, req, record, scope),
     }));
     match.buildSatisfied = match.requirements.filter((r) => r.stage === 'build').every((r) => r.satisfied);
     match.satisfied = match.requirements.every((r) => r.satisfied);
@@ -269,15 +279,21 @@ export function evaluate(workItem, rules = [], record = {}, opts = {}) {
 
   const exceptionActive = Boolean(record.exception) && (!record.exception.expiresAt || record.exception.expiresAt > now);
   const exceptionExpired = Boolean(record.exception) && !exceptionActive;
+  // An exception waives only the rules it was granted for (older records without a list waive nothing new).
+  const waived = new Set(exceptionActive ? record.exception.ruleIds || [] : []);
   const needsDeclaration = Boolean(opts.requireDeclaration) && !declaration && !applicable.length;
+  // "Yes"/"Unsure" with no active declaration rule must not silently pass.
+  const declarationRuleMissing = (declaration === 'yes' || declaration === 'unsure') && !opts.declarationRuleId && !applicable.length;
 
   const statusFor = (openItems) => {
+    if (needsDeclaration || declarationRuleMissing) return 'blocked';
     if (!applicable.length) return 'not-applicable';
+    const unwaived = openItems.filter((o) => !waived.has(o.ruleId));
     if (!openItems.length) return 'clear';
-    return exceptionActive ? 'exception' : 'blocked';
+    return unwaived.length ? 'blocked' : 'exception';
   };
   const done = statusFor(open);
-  const build = needsDeclaration ? 'blocked' : statusFor(openBuild);
+  const build = statusFor(openBuild);
 
   const awaiting = applicable.some((m) => m.requirements.some((r) => r.type === 'approval' && !r.satisfied) &&
     m.requirements.filter((r) => r.type !== 'approval' && r.stage === 'build').every((r) => r.satisfied));
@@ -285,8 +301,8 @@ export function evaluate(workItem, rules = [], record = {}, opts = {}) {
   return {
     status: done,
     stages: {
-      build: { status: build, open: openBuild, needsDeclaration, summary: describe(build, applicable, openBuild, 'build', needsDeclaration) },
-      done: { status: done, open, summary: describe(done, applicable, open, 'done') },
+      build: { status: build, open: openBuild, needsDeclaration, declarationRuleMissing, summary: describe(build, applicable, openBuild.filter((o) => !waived.has(o.ruleId)), 'build', needsDeclaration, declarationRuleMissing) },
+      done: { status: done, open, needsDeclaration, declarationRuleMissing, summary: describe(done, applicable, open.filter((o) => !waived.has(o.ruleId)), 'done', needsDeclaration, declarationRuleMissing) },
     },
     applicable,
     dismissed,
@@ -300,7 +316,8 @@ export function evaluate(workItem, rules = [], record = {}, opts = {}) {
 }
 
 /** One human sentence for validator errors, comments and agent replies. */
-export function describe(status, applicable, open, stage = 'done', needsDeclaration = false) {
+export function describe(status, applicable, open, stage = 'done', needsDeclaration = false, declarationRuleMissing = false) {
+  if (declarationRuleMissing) return 'This work item was declared as affecting personal information, but no active rule handles declarations. Ask a Jira admin to activate "Contact details and location" (or another declaration rule).';
   if (needsDeclaration) return 'Before work starts, say whether this change affects personal information (Yes / No / Unsure) in the Preflight panel.';
   if (status === 'not-applicable') return 'No configured privacy rule matched this work item.';
   if (status === 'clear') {
@@ -314,7 +331,14 @@ export function describe(status, applicable, open, stage = 'done', needsDeclarat
     byRule[item.ruleTitle] = byRule[item.ruleTitle] || { clause: item.ruleClause, items: [] };
     byRule[item.ruleTitle].items.push(item.label);
   }
-  const parts = Object.entries(byRule).map(([title, v]) => `${title} (${v.clause}): ${v.items.join(', ')}`);
+  const parts = Object.entries(byRule).map(([title, v]) => {
+    const approval = v.items.some((l) => /approval/i.test(l));
+    const answers = v.items.filter((l) => !/approval/i.test(l));
+    const bits = [];
+    if (answers.length) bits.push(answers.length <= 2 ? answers.join(', ') : `${answers.length} questions`);
+    if (approval) bits.push('approval');
+    return `${title} (${v.clause}): ${bits.join(' + ')}`;
+  });
   const lead = stage === 'build' ? 'Privacy review needed before work starts.' : `${open.length} privacy requirement(s) still open.`;
   return `${lead} ${parts.join('; ')}.`;
 }

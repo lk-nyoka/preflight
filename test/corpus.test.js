@@ -42,9 +42,29 @@ export const SHOULD_MATCH = [
   ['WhatsApp broadcast for the Black Friday sale', 'popia-direct-marketing'],
   ['CSV export of all customers for the auditor', 'popia-bulk-export'],
   ['Database dump to share with vendor for debugging', 'popia-bulk-export'],
+
+  // From the independent blind audit (misses before the fix)
+  ['Send WhatsApp marketing messages to opted-in customers', 'popia-direct-marketing'],
+  ['Integrate credit bureau check (TransUnion) into loan application', 'popia-personal-info'],
+  ['Retain CCTV footage of visitors for 90 days', 'popia-personal-info'],
+  ['Build HR dashboard showing employee sick leave and diagnoses', 'popia-special'],
+  ['Add race and gender fields for B-BBEE employment equity report', 'popia-special'],
+  ['Facebook pixel tracking of website visitors for retargeting ads', 'popia-personal-info'],
+  ['Allow customers to download all their personal data (data subject access request)', 'popia-personal-info'],
+  ['Migrate HR records to Workday cloud in EU', 'popia-cross-border'],
+  ['Store employee personal information in the new HR system', 'popia-personal-info'],
+  ['Capture customer PII during onboarding', 'popia-personal-info'],
 ];
 
 export const SHOULD_NOT_MATCH = [
+  // From the independent audit (false positives before the fix)
+  'Deploy Lambda to us-east-1',
+  'Move CI runners to eu-west-1',
+  'Tune learner rate for the ranking model',
+  'Add diagnosis logs to crash reporter',
+  'Overseas shipping rates table',
+  'Kid-friendly colour palette',
+  'Add GP referral letters to the clinic site',
   'Promo code bug on checkout page',
   'Fix the campaign dashboard filter',
   'Political party colours on the map legend',

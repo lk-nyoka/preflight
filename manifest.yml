@@ -77,6 +77,11 @@ modules:
       events:
         - avi:forge:installed:app
 
+  scheduledTrigger:
+    - key: preflight-daily
+      function: on-daily
+      interval: day
+
   # ── Rovo: an assignable agent that explains gaps and gathers evidence ─────
   rovo:agent:
     - key: preflight-agent
@@ -317,6 +322,8 @@ modules:
       handler: index.onIssueChanged
     - key: on-installed
       handler: index.onInstalled
+    - key: on-daily
+      handler: index.onDaily
     - key: action-check-issue
       handler: index.actionCheckIssue
     - key: action-list-rules

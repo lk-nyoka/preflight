@@ -3,7 +3,7 @@
  */
 import React, { useEffect, useState } from 'react';
 import ForgeReconciler, {
-  Button, DynamicTable, EmptyState, Heading, Inline, Link, Lozenge, SectionMessage, Spinner, Stack, Tag, TagGroup, Text, User, Em,
+  Button, DynamicTable, EmptyState, Heading, Inline, Label, Link, Lozenge, SectionMessage, Spinner, Stack, Tag, TagGroup, Text, Toggle, User, UserPicker, Em, Strong,
 } from '@forge/react';
 import { invoke } from '@forge/bridge';
 
@@ -32,18 +32,28 @@ const App = () => {
   const [data, setData] = useState(null);
   const [error, setError] = useState(null);
   const [busy, setBusy] = useState(false);
-  const decide = async (ruleId, decision) => {
+  const [approverDraft, setApproverDraft] = useState(null);
+  const run = async (name, payload) => {
     setBusy(true);
-    const out = await invoke('decideRuleChange', { ruleId, decision }).catch((e) => ({ ok: false, error: e.message }));
+    const out = await invoke(name, payload).catch((e) => ({ ok: false, error: e.message }));
     setBusy(false);
     if (out.ok === false) setError(out.error);
-    else load();
+    else { setError(null); load(); }
   };
+  const decide = (c, decision) => run('decideRuleChange', { ruleId: c.ruleId, proposalId: c.proposalId, decision });
   const load = () => invoke('getInbox').then((d) => (d.ok === false ? setError(d.error) : setData(d))).catch((e) => setError(e.message));
   useEffect(() => { load(); }, []);
 
-  if (error) return <SectionMessage appearance="error" title="Could not load reviews"><Text>{error}</Text></SectionMessage>;
+  if (error && !data) return <SectionMessage appearance="error" title="Could not load reviews"><Text>{error}</Text></SectionMessage>;
   if (!data) return <Spinner label="Loading reviews" />;
+  const diffText = (d) => !d ? null : [
+    d.phrasesAdded?.length ? `adds phrases: ${d.phrasesAdded.join(', ')}` : null,
+    d.phrasesRemoved?.length ? `REMOVES phrases: ${d.phrasesRemoved.join(', ')}` : null,
+    d.requirementsAdded?.length ? `adds: ${d.requirementsAdded.join('; ')}` : null,
+    d.requirementsRemoved?.length ? `REMOVES: ${d.requirementsRemoved.join('; ')}` : null,
+    d.requirementsChanged?.length ? `changes: ${d.requirementsChanged.join('; ')}` : null,
+    d.textChanged?.length ? `text: ${d.textChanged.join(', ')}` : null,
+  ].filter(Boolean);
 
   return (
     <Stack space="space.300">
@@ -56,6 +66,13 @@ const App = () => {
         {data.approvers.length ? data.approvers.map((id) => <User key={id} accountId={id} />) : <Text><Em>any Jira admin (small-team mode)</Em></Text>}
         {data.canApprove && <Lozenge appearance="success">you can approve</Lozenge>}
       </Inline>
+      {error && <SectionMessage appearance="error"><Text>{error}</Text></SectionMessage>}
+      {data.pendingReset && (
+        <SectionMessage appearance="warning" title="A reset to small-team mode is pending">
+          <Text>Requested by an admin: {data.pendingReset.reason}. It takes effect {when(data.pendingReset.effectiveAt)} unless an approver cancels it.</Text>
+          {data.isApprover && <Inline><Button appearance="warning" isDisabled={busy} onClick={() => run('cancelReset', {})}>Cancel the reset</Button></Inline>}
+        </SectionMessage>
+      )}
       {data.ruleChanges.length > 0 && (
         <Stack space="space.100">
           <Heading size="medium">{`Rule changes to decide (${data.ruleChanges.length})`}</Heading>
@@ -66,9 +83,13 @@ const App = () => {
               key: c.ruleId,
               cells: [
                 { key: 'r', content: <Stack space="space.025"><Text>{c.title}</Text><Tag text={c.clause} /></Stack> },
-                { key: 'c', content: <Text>{c.kind}{c.change ? `: ${c.change}` : ''}</Text> },
+                { key: 'c', content: <Stack space="space.025">
+                  <Inline space="space.050"><Text><Strong>{c.kind}</Strong></Text>{c.diff?.weakens && <Lozenge appearance="removed">weakens the rule</Lozenge>}</Inline>
+                  {(diffText(c.diff) || []).map((line) => <Text key={line}>{line}</Text>)}
+                  {c.reason && <Text><Em>{c.reason}</Em></Text>}
+                </Stack> },
                 { key: 'b', content: <Stack space="space.025"><User accountId={c.by} /><Text>{when(c.at)}</Text></Stack> },
-                { key: 'a', content: <Inline space="space.050"><Button appearance="primary" isDisabled={busy} onClick={() => decide(c.ruleId, 'apply')}>Apply</Button><Button isDisabled={busy} onClick={() => decide(c.ruleId, 'reject')}>Reject</Button></Inline> },
+                { key: 'a', content: <Inline space="space.050"><Button appearance="primary" isDisabled={busy} onClick={() => decide(c, 'apply')}>Apply</Button><Button isDisabled={busy} onClick={() => decide(c, 'reject')}>Reject</Button></Inline> },
               ],
             }))}
           />
@@ -83,6 +104,31 @@ const App = () => {
           <Heading size="medium">{`Waiting on the team (${data.waitingOnTeam.length})`}</Heading>
           {table(data.waitingOnTeam, 'Nothing is waiting on the team.')}
         </>
+      )}
+      {data.exceptions?.length > 0 && (
+        <>
+          <Heading size="medium">{`Under a time-limited exception (${data.exceptions.length})`}</Heading>
+          {table(data.exceptions, '')}
+        </>
+      )}
+      {data.isApprover && (
+        <Stack space="space.150">
+          <Heading size="medium">Approver settings</Heading>
+          <Label labelFor="ap">Approvers (only a current approver can change this list)</Label>
+          <UserPicker name="ap" label="Approvers" isMulti defaultValue={data.approvers}
+            onChange={(users) => setApproverDraft((Array.isArray(users) ? users : users ? [users] : []).map((u) => u.id).filter(Boolean))} />
+          <Inline><Button appearance="primary" isDisabled={busy || !approverDraft} onClick={() => run('setApprovers', { approverAccountIds: approverDraft })}>Save approvers</Button></Inline>
+          {[
+            ['requireDeclaration', 'Ask for a Yes / No / Unsure declaration before work starts'],
+            ['separationOfDuties', 'Separation of duties: reporters, assignees and answer authors cannot approve'],
+            ['failClosed', 'Fail closed: hold transitions if Preflight cannot evaluate'],
+          ].map(([key, text]) => (
+            <Inline key={key} space="space.100" alignBlock="center">
+              <Toggle id={`in-${key}`} isChecked={Boolean(data.settings[key])} isDisabled={busy} onChange={() => run('setPolicy', { [key]: !data.settings[key] })} />
+              <Label labelFor={`in-${key}`}>{text}</Label>
+            </Inline>
+          ))}
+        </Stack>
       )}
       <Text><Em>Only work items you can see in Jira are listed. Preflight records your organisation's review; it is not legal advice.</Em></Text>
     </Stack>

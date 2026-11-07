@@ -70,10 +70,11 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
  */
 export async function withLock(issueId, fn, { attempts = 8 } = {}) {
   const key = `lock:${issueId}`;
+  const token = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
   for (let i = 0; i < attempts; i += 1) {
     let acquired = false;
     try {
-      await kvs.set(key, { at: Date.now() }, { keyPolicy: 'FAIL_IF_EXISTS', ttl: { value: 10, unit: 'SECONDS' } });
+      await kvs.set(key, { token }, { keyPolicy: 'FAIL_IF_EXISTS', ttl: { value: 10, unit: 'SECONDS' } });
       acquired = true;
     } catch {
       await sleep(120 + i * 80);
@@ -82,7 +83,9 @@ export async function withLock(issueId, fn, { attempts = 8 } = {}) {
       try {
         return await fn();
       } finally {
-        await kvs.delete(key).catch(() => {});
+        // Only release our own lock: if we overran the TTL, someone else may hold it now.
+        const held = await kvs.get(key).catch(() => null);
+        if (held?.token === token) await kvs.delete(key).catch(() => {});
       }
     }
   }
@@ -107,9 +110,14 @@ export async function updateRecord(issueId, actor, event, mutate, details = {}) 
 
 /* ---------------- write-once audit ---------------- */
 
-/** Sortable, unique sequence id: 13-char base-36 timestamp plus random suffix. */
+/**
+ * Sortable, unique sequence id that sorts NEWEST FIRST: an inverted base-36
+ * timestamp plus a random suffix. Prefix queries return keys in ascending
+ * order, so the most recent events always come back first.
+ */
+const MAX_TS = 9999999999999;
 function sequenceId() {
-  return `${Date.now().toString(36).padStart(10, '0')}-${Math.random().toString(36).slice(2, 8)}`;
+  return `${(MAX_TS - Date.now()).toString(36).padStart(9, '0')}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
 /**
@@ -130,20 +138,20 @@ export async function appendAudit(scope, entry) {
   return event;
 }
 
-/** Newest-first audit events for a scope (issue id or "admin"). */
-export async function listAudit(scope, { limit = 50, maxPages = 10 } = {}) {
+/** Newest-first audit events for a scope (issue id or "admin"). Keys already sort newest first. */
+export async function listAudit(scope, { limit = 50 } = {}) {
   const results = [];
   let cursor;
-  for (let page = 0; page < maxPages; page += 1) {
-    let q = kvs.query().where('key', WhereConditions.beginsWith(`audit:${scope}:`)).limit(100);
+  while (results.length < limit) {
+    let q = kvs.query().where('key', WhereConditions.beginsWith(`audit:${scope}:`)).limit(Math.min(100, limit - results.length));
     if (cursor) q = q.cursor(cursor);
     const { results: batch = [], nextCursor } = await q.getMany();
     results.push(...batch);
-    if (!nextCursor) break;
+    if (!nextCursor || !batch.length) break;
     cursor = nextCursor;
   }
   return results
-    .sort((a, b) => (a.key < b.key ? 1 : -1))
+    .sort((a, b) => (a.key < b.key ? -1 : 1))
     .slice(0, limit)
     .map((r) => r.value);
 }

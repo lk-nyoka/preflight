@@ -8,7 +8,7 @@
  */
 import api, { route } from '@forge/api';
 
-const FIELDS = 'summary,description,labels,project,reporter,status';
+const FIELDS = 'summary,description,labels,project,reporter,assignee,status,parent';
 
 /** Flatten Atlassian Document Format (or a plain string) to text. */
 export function adfToText(node) {
@@ -51,16 +51,20 @@ export async function getWorkItem(issueIdOrKey, { asUser = true } = {}) {
   );
   const summary = issue.fields?.summary || '';
   const description = adfToText(issue.fields?.description);
+  // Sub-tasks inherit their parent's wording, so splitting work into neutrally worded sub-tasks does not dodge a rule.
+  const parentSummary = issue.fields?.parent?.fields?.summary || '';
   return {
     id: issue.id,
     key: issue.key,
     summary,
+    parentKey: issue.fields?.parent?.key || null,
+    assigneeAccountId: issue.fields?.assignee?.accountId || null,
     projectKey: issue.fields?.project?.key,
     reporterAccountId: issue.fields?.reporter?.accountId || null,
     status: issue.fields?.status?.name,
     statusCategory: issue.fields?.status?.statusCategory?.key || null, // new | indeterminate | done
     labels: issue.fields?.labels || [],
-    text: `${summary}\n${description}`,
+    text: `${summary}\n${description}${parentSummary ? `\n${parentSummary}` : ''}`,
   };
 }
 

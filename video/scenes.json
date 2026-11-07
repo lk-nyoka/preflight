@@ -1,0 +1,14 @@
+[
+  {"id": "hook",     "min": 12, "vo": "This ticket adds a South African ID number to a signup form. No one has asked why it's needed, how long it's kept, or whether privacy signed off."},
+  {"id": "title",    "min": 5,  "vo": "Meet Preflight."},
+  {"id": "blocked",  "min": 14, "vo": "When a developer starts work, Preflight holds the ticket, before a single line of code is written. The message names the rule, the POPIA sections, and exactly what's missing."},
+  {"id": "panel",    "min": 14, "vo": "The panel tells you what to do next, and who approves. Every rule shows exactly why it matched."},
+  {"id": "rovo",     "min": 16, "vo": "Rovo drafts the answers with you. But a draft never counts until you confirm it. AI can help. It can't approve."},
+  {"id": "inbox",    "min": 12, "vo": "Your Information Officer sees everything waiting in one inbox, and signs off."},
+  {"id": "pass",     "min": 6,  "vo": "Now, work can start."},
+  {"id": "dodge",    "min": 15, "vo": "Rewording the ticket won't make the review disappear. And if anyone changes an approved answer, the approval goes stale, and the gate closes again."},
+  {"id": "done",     "min": 12, "vo": "Before Done, a second gate asks for proof that it shipped as agreed: the updated privacy notice."},
+  {"id": "policy",   "min": 17, "vo": "Rules come from your own policy. Rovo turns a policy page into draft rules, and nothing is enforced until an approver activates them. Preflight even shows any workflow that can still skip the gate."},
+  {"id": "close",    "min": 16, "vo": "Scanners find personal data after it's already in Jira. Checklists hope someone ticks the box. Preflight puts your privacy review in front of the work, with a write-once record of every decision."},
+  {"id": "end",      "min": 6,  "vo": "Preflight. Your privacy policy, enforced before build."}
+]

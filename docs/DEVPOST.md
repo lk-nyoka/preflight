@@ -6,11 +6,11 @@ Fields in `[[double brackets]]` need your real values after you deploy. Edit any
 
 ## Project name (60 max)
 
-Preflight: privacy evidence gate for Jira
+Preflight: privacy review before build, in Jira
 
 ## Elevator pitch (200 max)
 
-Preflight turns your privacy policy into an enforceable check in Jira: work that touches personal data can't close until the required evidence and an approver's sign-off are recorded.
+Preflight puts your privacy policy in front of the work: Jira holds a ticket that changes personal data until the review is answered and your Information Officer signs off, before a line is built.
 
 ---
 
@@ -19,77 +19,74 @@ Preflight turns your privacy policy into an enforceable check in Jira: work that
 ```markdown
 ## Inspiration
 
-In South Africa every organisation that handles personal information falls under POPIA, and every one of them has to appoint an Information Officer. In practice the privacy policy lives in a PDF or a Confluence page, and the work that actually changes how personal data is collected, stored or shared lives in Jira. Nothing connects the two. A ticket like "add the customer's ID number to signup" can be built, reviewed and shipped without anyone asking why the ID number is needed, how long it is kept, or whether the Information Officer has seen it.
+In South Africa every organisation that handles personal information falls under POPIA and has to appoint an Information Officer. In practice the privacy policy lives in a PDF or a Confluence page, and the work that changes how personal data is collected, stored or shared lives in Jira. Nothing connects the two. A ticket like "add the customer's ID number to signup" can be built, reviewed and shipped without anyone asking why the ID number is needed, how long it is kept, or whether the Information Officer has seen it.
 
-I wanted the policy to show up at the exact moment it matters, on the ticket, and to have teeth: the work should not be able to close until the review has happened.
+Existing tools don't close that gap. Privacy scanners find personal data *after* it is already in Jira. Checklist apps can block Done, but only if someone remembered to add the right checklist, and by the time a ticket is closed the field has already shipped. I wanted the policy to show up at the moment it matters: when someone starts building.
 
 ## What it does
 
-Preflight is a Forge app for Jira that turns an organisation's privacy rules into a pre-flight check for work items.
+Preflight is a Forge app for Jira that turns an organisation's privacy review into two gates.
 
-- **Detects** when a work item proposes a change to how personal information is collected, used, stored or shared, using rules written by the organisation (trigger phrases and labels), and shows *why* it matched: the exact phrase and a snippet (with ID and phone numbers removed).
-- **Matches are sticky**: rewording the ticket to remove "ID number" does not open the gate. Only an approver can dismiss a rule, with a reason.
-- **Explains** which internal rule applies and which POPIA section inspired it (for example *Identifying numbers, POPIA s1, s10, s11, s13, s14, s18*).
-- **Collects evidence** right on the ticket: purpose, why less data won't do, lawful basis, how people are told, retention period, security review link.
-- **Blocks the transition to Done** with a workflow validator until the evidence is complete and an approver signs off. The error message names the rule, the clause and what is missing.
-- **Keeps approvals honest**: if someone edits an answer after approval, or the rule itself changes, the approval goes stale and the gate closes again.
-- **A Rovo agent** explains the gaps, drafts answers with the developer, saves answers they confirm and requests approval. For admins it reads a privacy policy page and proposes **draft** rules. It can never approve, dismiss, grant exceptions or activate a rule.
-- **MCP tools** let a coding agent ask "which privacy steps apply to PRIV-12?" before writing a line of code (Preview; an org admin enables external MCP access).
-- **An admin page** to review, edit, test and activate rules, a one-click demo loader, and gate status per project (so a workflow without the gate is visible).
-- Everything is **audited**, and blocked work is searchable with JQL (`preflightStatus = blocked`).
+- **Review before build.** When a work item proposes a change to how personal information is collected, used, stored or shared, moving it to *In Progress* is refused until the team answers the review questions your policy requires (purpose, why less data won't do, lawful basis, retention) and a **named approver** signs off.
+- **Evidence before Done.** Moving it to *Done* is refused until the ship-time evidence is recorded, such as the updated privacy notice.
+- **It knows which review applies.** A deterministic, stem-aware rules engine reads the ticket and shows exactly why a rule matched ("mentions 'SA ID number'"). Rewording the ticket doesn't make a review disappear; only an approver can dismiss a rule, with a reason.
+- **The panel says what to do next and who approves.** Questions are grouped *before work starts* and *before Done*.
+- **An inbox for the Information Officer.** *Preflight reviews* lists everything waiting for approval and everything waiting on the team.
+- **Rovo helps, humans decide.** The Preflight agent explains the gaps and drafts answers with the developer, but a draft only counts after the person confirms it in the panel. The agent can never approve, dismiss, grant exceptions, activate rules, or declare that a change has no personal data.
+- **Rules come from your policy.** Admins ask the agent to turn a Confluence policy page into **draft** rules, with example tickets that must and must not match. Nothing is enforced until it is activated.
+- **Governance built in.** Once approvers are named, a Jira admin can't approve, can't add themselves as approver, and edits to active rules or weaker settings become proposals that an approver applies or rejects.
+- **A write-once audit history** of every answer, approval, rule change and setting change, and a coverage check that lists any workflow transition that can skip the gates.
 
-It ships with an editable starter pack inspired by POPIA themes (identifying numbers, special personal information, children, electronic direct marketing, cross-border transfers and bulk exports). It is not a complete POPIA assessment; the rules are the organisation's own.
+It ships with an editable starter pack inspired by POPIA themes (identifying numbers, contact details and location, special personal information, children, electronic direct marketing, cross-border transfers, bulk exports). It is not a complete POPIA assessment. The engine is regulation-agnostic, so the same pattern works for GDPR or HIPAA.
 
-Tools that scan for personal information find data already sitting in Jira. Preflight is different: it controls the *changes* that would introduce new ways of collecting, using or sharing personal information, before they ship.
-
-Preflight enforces your review process. It never claims work is "compliant" and it is not legal advice.
+Preflight enforces your organisation's own review process. It never says work is "compliant" and it is not legal advice.
 
 ## How I built it
 
-- **Forge** with UI Kit for the issue panel and admin page, a `jira:workflowValidator` (enabled for company-managed and team-managed projects), product triggers, a `jira:entityProperty` for JQL, and the Forge Key-Value Store.
-- **A deterministic rules engine** (`src/engine/evaluate.js`) is the single source of truth. The panel, the validator, the Rovo actions and the MCP tools all call the same pure function, so they can never disagree about whether a ticket is blocked.
-- **No LLM in the gate.** A blocking validator has to be fast and explainable, so it re-evaluates rules on the live ticket text and stored matches instead of asking a model. AI is used where it helps people: in the **Rovo agent** (`rovo:agent` plus six `action` modules), which drafts and saves answers the user confirms.
-- **`rovo:mcp`** exposes the check, list-rules and request-approval actions as MCP tools.
-- **Evidence and approvals live in app storage**, not in Jira issue properties, because issue properties can be edited by anyone with edit permission through the REST API. The issue property is only a mirror for search.
-- **Permissions are checked server-side** in every resolver. Once an organisation names approvers, only they can approve; a Jira admin is not automatically the Information Officer. With none named, Preflight runs in a labelled small-team mode where Jira admins approve. Optional separation of duties stops reporters approving their own work.
-- **Fails closed by default**: if Preflight cannot evaluate a work item, the transition is held with a clear message (switchable to fail-open).
-- **Authoring with AI, enforcing without it**: the Rovo agent can turn a Confluence policy page into *draft* rules, but drafts are never enforced until an admin reviews and activates them.
-- 21 automated tests cover the engine and end-to-end flows with Jira and storage faked: blocking, approval, stale approval, sticky matches, approver roles, exception expiry, approval-request rate limiting, fail-closed and draft-only rule authoring.
+- **Forge** with UI Kit for the issue panel, the admin page and a global *Preflight reviews* page; two `jira:workflowValidator` modules (enabled for company-managed and team-managed projects); product triggers for create, update and delete; a `jira:entityProperty` for JQL; and the Forge Key-Value Store.
+- **One deterministic engine** (`src/engine/evaluate.js`) powers both gates, the panel, the Rovo actions and the MCP tools, so they can never disagree. No LLM sits in the enforcement path: a blocking validator has to be fast, explainable and free to run.
+- **Matching that respects Jira.** Stem-aware phrases, context triggers ("promo" only counts with "SMS"), global excludes for Jira idioms ("race condition", "child issue", "health check"), per-rule examples checked on every save, and a regression corpus of realistic tickets.
+- **Rovo agent** (`rovo:agent` with seven `action` modules) and **`rovo:mcp`** exposing the read-only check and rule tools plus a rate-limited approval request to coding agents.
+- **Trust engineering on KVS.** Audit events are separate keys written with `FAIL_IF_EXISTS`, so history can't be rewritten through the app. Record updates run under a per-ticket lock (a `FAIL_IF_EXISTS` key with a TTL) so concurrent saves don't overwrite each other. Approvals carry a fingerprint of the answers they approved and go stale if those answers or the rule change. Evidence is deleted with its ticket.
+- **Permissions are checked server-side** in every resolver and action. The panel always takes the issue from Jira's context, never from the request.
+- **36 automated tests** cover the engine, the matcher corpus and end-to-end flows with Jira and storage faked.
 
 ## Challenges
 
-- **Making a gate people won't hate.** A blocker that fires on "race condition" or "child issue" would be uninstalled in a day, so trigger phrases match whole words and the starter pack deliberately avoids words like *child* and *minor* that mean something else in Jira. Approvers can dismiss a false positive with a reason, and anyone can flag a rule that was missed.
-- **Deciding where AI belongs.** It would have been easy to let an LLM decide whether a ticket is "POPIA compliant". That would be slow, unexplainable and legally dangerous. Keeping the decision deterministic and the AI assistive made the product more trustworthy.
-- **Getting the law right.** I checked every section reference in the starter pack against the Act. For example, an ID number is ordinary personal information (it is in the s1 definition), not special personal information under s26.
+- **Making a gate people won't hate.** My first matcher blocked "Promo code bug" and "race condition" tickets and missed "ID numbers" because of the plural. I rebuilt it with stemming, context triggers and excludes, then tested it on tickets it had never seen. It now ships with a regression corpus so it can't quietly get worse.
+- **Putting the gate in the right place.** Blocking *Done* is too late: the code has shipped. The real value is a review before build, with only proof-of-delivery checked at Done.
+- **Deciding where AI belongs.** It would be easy to let an LLM decide whether a ticket is "POPIA compliant". That would be slow, unexplainable and legally dangerous. AI drafts and explains; deterministic rules and humans decide.
+- **Governing the governors.** A privacy control is only as strong as whoever can switch it off, so admin changes to active rules and weaker settings need the Information Officer's approval, and all of it is in a write-once log.
+- **Getting the law right.** Every section reference in the starter pack was checked against the Act. For example, an ID number is ordinary personal information (s1), not special personal information under s26.
 - [[Add anything that went wrong while deploying or testing on your site.]]
 
 ## What I learned
 
-- How Forge's workflow validators, triggers, entity properties, Rovo actions and `rovo:mcp` fit together into one product.
-- That trust features (stale approvals, audit trails, separation of duties, fail-open vs fail-closed) matter more for a compliance tool than clever AI.
+- How Forge validators, triggers, entity properties, KVS key policies and TTLs, Rovo actions and `rovo:mcp` fit together into one product.
+- That trust features (stale approvals, sticky matches, write-once audit, governance) matter more in a compliance tool than clever AI.
 - [[Add one or two things you learned building it.]]
 
 ## What's next
 
-- Rules authored directly from Confluence policy pages, with an Information Officer approval step before activation.
-- More rule packs (GDPR, HIPAA, PCI DSS) and JSM support for data-subject access requests (POPIA s23).
-- A Marketplace listing, so South African teams can install it in minutes.
+- JSM support for data-subject access requests (POPIA s23) and a GDPR rule pack.
+- Reading policy pages from Confluence directly into rule proposals.
+- A Marketplace listing for South African teams.
 ```
 
 ---
 
 ## Built with (tags)
 
-forge, atlassian-forge, jira, jira-cloud, rovo, rovo-agents, mcp, forge-ui-kit, react, javascript, node.js, forge-kvs, popia, privacy
+forge, atlassian-forge, jira, jira-cloud, rovo, rovo-agents, mcp, forge-ui-kit, forge-kvs, react, javascript, node.js, popia, privacy, governance
 
 ## "Try it out" links
 
 - GitHub: https://github.com/lk-nyoka/preflight
-- [[Optional: link to the demo video]]
+- [[Optional: demo video link]]
 
 ## Demo video URL
 
-[[YouTube link. Under 5 minutes, but put the blocked-transition moment in the first 90 seconds. Judges don't have to watch past 3 minutes.]]
+[[YouTube link. Follow docs/DEMO_SCRIPT.md: the blocked "In Progress" move happens by 0:30 and the whole story ends by 3:00.]]
 
 ## Installation link
 
@@ -101,17 +98,18 @@ forge, atlassian-forge, jira, jira-cloud, rovo, rovo-agents, mcp, forge-ui-kit, 
 Full guide: https://github.com/lk-nyoka/preflight/blob/main/docs/JUDGES.md
 
 1. Install with the link above on a Jira site where you are a Jira admin.
-2. Jira settings → Apps → Preflight → Demo setup → enter any project key → Load demo.
-   This activates the POPIA starter pack and creates 5 sample work items.
-3. Attach the gate (one time): open the project's workflow → transition into Done →
-   Validators/Rules → add "Preflight privacy review gate" → publish.
-4. Open "Add SA ID number field to customer signup". The Preflight panel shows Blocked.
-   Try moving it to Done: the transition is refused.
-5. Fill the answers → Save answers → Approve (Jira admins approve in small-team mode) → move to Done: it now succeeds.
-6. Edit the retention answer: the approval goes stale and the gate closes again.
-6b. Rewording a ticket to remove the trigger phrase does not reopen the gate.
-7. Optional: Rovo → Preflight agent on a demo work item: "Preflight this work item".
-8. Optional: JQL  preflightStatus = blocked
+2. Jira settings → Apps → Preflight → Setup → enter any project key → Load demo.
+   This activates the POPIA starter rules and creates 5 sample work items.
+3. Attach the gates (one time): in the project's workflow, add
+   "Preflight: privacy review before build" to the transition into In Progress and
+   "Preflight: privacy evidence before Done" to the transition into Done. Publish.
+   Setup → Check workflow coverage should show both as protected.
+4. Open "Add SA ID number field to customer signup" and drag it to In Progress: refused.
+5. Answer the 4 questions → Save → Approve (Jira admins approve in small-team mode) → In Progress works.
+6. Drag to Done: refused until "Privacy notice updated (link)" is filled in.
+7. Edit an approved answer: the approval goes stale and the gate closes again.
+8. Apps → Preflight reviews shows the approver's inbox.
+9. Optional: Rovo → Preflight agent: "What do I need before I can start this?"
 No external services or credentials are needed.
 ```
 
@@ -123,8 +121,8 @@ No external services or credentials are needed.
 
 Preflight is built entirely on Atlassian Forge (Node.js runtime, UI Kit, Forge Key-Value Store) and integrates with:
 
-- **Jira**: an issue panel shows the privacy check and collects evidence; a `jira:workflowValidator` blocks the transition to Done until requirements are met (company-managed and team-managed projects); product triggers re-evaluate work items on create and update; a `jira:entityProperty` makes `preflightStatus` searchable in JQL; an admin page manages rules, testing, demo data and approvers; comments notify approvers.
-- **Rovo**: a `rovo:agent` named Preflight with six `action` modules (check a work item, list rules, save a confirmed answer, request approval, flag a missed rule, draft a rule from a policy page). The agent explains gaps and drafts answers, and server-side checks stop it from approving.
+- **Jira**: an issue panel shows the review and collects evidence; two `jira:workflowValidator` modules hold the transitions into In Progress and Done (company-managed and team-managed projects); product triggers re-evaluate work items on create and update and delete evidence on delete; a global page is the approver's inbox; a `jira:entityProperty` makes the status searchable in JQL; an admin page manages rules, testing, demo data, approvers, coverage and the audit log; comments notify approvers; the workflow APIs power the coverage check.
+- **Rovo**: a `rovo:agent` named Preflight with seven `action` modules (check a work item, list rules, propose an answer, request approval, flag a missed rule, record a yes/unsure declaration, draft a rule from a policy page). Server-side checks stop it from approving or making a draft count.
 - **Rovo MCP** (`rovo:mcp`): exposes the check, list-rules and request-approval actions as MCP tools for external coding agents.
 
 ## Category
@@ -133,27 +131,25 @@ Apps for Business Teams   [[decide: Business Teams (recommended) or Specialized 
 
 ## Why this track
 
-The Business Teams category explicitly covers legal and compliance work, and privacy review is exactly that: Information Officers and privacy teams, a role POPIA requires every South African organisation to have, need the right information in front of them and a say before work ships. Preflight puts their policy on the ticket and gives them the sign-off. POPIA applies to every industry, so it is a business function rather than one sector, and the engine is regulation-agnostic (GDPR, HIPAA and PCI DSS rule packs are the next step).
-
-*(Alternative if you choose Specialized Industries: "Privacy and data protection is a regulated, specialist field. Preflight turns an Information Officer's expert knowledge into rules that enforce themselves in the delivery workflow.")*
+The Business Teams category explicitly covers legal and compliance work, and privacy review is exactly that. Information Officers and privacy teams (a role POPIA requires every South African organisation to have) need the right information in front of them and a say before work ships. Preflight puts their policy on the ticket, gives them an inbox and the sign-off, and governs who can change the rules. POPIA applies to every industry, so this is a business function rather than one sector, and the engine is regulation-agnostic.
 
 ## Bonus prize
 
 Best Agents - Rovo/Assignable agents
 
-(The app also exposes an MCP server via `rovo:mcp`, but a submission can win only one bonus, and the Rovo agent is the more complete story.)
+(The app also exposes an MCP server via `rovo:mcp`, but a submission can win only one bonus, and the agent, which drafts answers a human confirms and turns policy pages into draft rules, is the more complete story.)
 
 ## Experience building with Forge
 
-**What worked well:** UI Kit let me build two full interfaces without managing a frontend build. The workflow validator module is a powerful extension point: being able to stop a transition with a custom message is what makes Preflight a gate rather than a dashboard. Rovo actions were straightforward to define in the manifest, and reusing the same actions as MCP tools through `rovo:mcp` was almost free. The Key-Value Store was all the storage I needed.
+**What worked well:** UI Kit let me build three full interfaces without a frontend build. Workflow validators are what make Preflight a gate rather than a dashboard. KVS key policies were a pleasant surprise: `FAIL_IF_EXISTS` gave me both a write-once audit log and a lock with a TTL. Rovo actions were straightforward to define, and reusing them as MCP tools through `rovo:mcp` was almost free.
 
-**What I struggled with:** Workflow rules default to company-managed projects only, and attaching a validator is still a manual workflow-editor step, so a judge or customer has to configure it by hand. Preflight records a heartbeat when its validator runs so at least the panel can warn when a project isn't protected yet. Some modules I relied on (workflow validator, `rovo:mcp`) are in Preview, which made me check the docs carefully. `forge lint` needs a logged-in account, which made validating in a fresh environment harder. [[Add anything from your own deploy/install.]]
+**What I struggled with:** Workflow rules default to company-managed projects only, and attaching a validator is still a manual step in the workflow editor, so I built a coverage check to show where the gates are missing. Several modules I rely on (workflow validators, `rovo:mcp`) are in Preview. `forge lint` needs a logged-in account, which made validating in a fresh environment harder. [[Add anything from your own deploy/install.]]
 
-**What I'd improve:** An API to attach an app's validator to a workflow programmatically (so onboarding is one click), a local emulator for product triggers and validators, and clearer guidance on what context a Rovo action receives (issue key, principal).
+**What I'd improve:** An API to attach an app's validator to a workflow programmatically (one-click onboarding), a local emulator for validators and triggers, and clearer documentation of the context a Rovo action receives (issue key, principal).
 
 ## AI tools used
 
-Claude (Anthropic) for planning, research on Forge modules and POPIA sections, writing code and tests, and drafting documentation. [[Add any others you used, e.g. Codex, Gemini/Antigravity, Cursor.]]
+Claude (Anthropic) for planning, research on Forge modules and POPIA sections, writing code and tests, independent review of the code, and drafting documentation. [[Add any others you used.]]
 
 ## How much did this hackathon help you develop new skills?
 

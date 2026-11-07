@@ -117,12 +117,12 @@ test('sticky matches survive rewording; dismissal removes them', () => {
   assert.equal(dismissed.status, 'not-applicable');
 });
 
-test('declaration: Unsure pulls in the general rule; required declaration blocks build only', () => {
+test('declaration: Unsure pulls in the general rule; a required declaration blocks both gates', () => {
   const opts = { declarationRuleId: DECLARATION_RULE_ID, requireDeclaration: true };
   const none = evaluate({ text: 'Update footer copyright year' }, active, {}, opts);
   assert.equal(none.stages.build.status, 'blocked');
   assert.equal(none.stages.build.needsDeclaration, true);
-  assert.equal(none.stages.done.status, 'not-applicable');
+  assert.equal(none.stages.done.status, 'blocked', 'cannot skip straight to Done without declaring');
   const no = evaluate({ text: 'Update footer copyright year' }, active, { declaration: { value: 'no' } }, opts);
   assert.equal(no.stages.build.status, 'not-applicable');
   const unsure = evaluate({ text: 'Update footer copyright year' }, active, { declaration: { value: 'unsure' } }, opts);
@@ -132,8 +132,9 @@ test('declaration: Unsure pulls in the general rule; required declaration blocks
 
 test('exceptions apply until they expire', () => {
   const work = { text: textOf(DEMO_ISSUES[0]) };
-  assert.equal(evaluate(work, active, { exception: { by: 'a', reason: 'pilot', expiresAt: 5000 } }, { now: 4000 }).status, 'exception');
-  const expired = evaluate(work, active, { exception: { by: 'a', reason: 'pilot', expiresAt: 5000 } }, { now: 6000 });
+  const ex = { by: 'a', reason: 'pilot', expiresAt: 5000, ruleIds: ['popia-identifiers'] };
+  assert.equal(evaluate(work, idRule, { exception: ex }, { now: 4000 }).status, 'exception');
+  const expired = evaluate(work, idRule, { exception: ex }, { now: 6000 });
   assert.equal(expired.status, 'blocked');
   assert.match(expired.summary, /expired/);
 });
@@ -147,4 +148,39 @@ test('redaction removes ID numbers, phone numbers and e-mails from snippets', ()
 
 test('no match is reported as "no configured rule matched", never as compliant', () => {
   assert.match(evaluate({ text: 'Update footer copyright year' }, active, {}).summary, /No configured privacy rule matched/);
+});
+
+test('exceptions waive only the rules they were granted for', () => {
+  const ex = { by: 'a', reason: 'pilot', expiresAt: 9e15, ruleIds: ['popia-direct-marketing'] };
+  const r = evaluate({ text: 'Bulk SMS campaign; also store fingerprint biometric data and SA ID number' }, active, { exception: ex });
+  assert.equal(r.status, 'blocked');
+});
+
+test('a dismissal re-opens when the ticket starts mentioning new phrases', () => {
+  const dismissals = { 'popia-identifiers': { by: 'a', reason: 'order reference only', phrases: ['id number'] } };
+  assert.equal(evaluate({ text: 'order reference id number' }, active, { dismissals }).status, 'not-applicable');
+  const r = evaluate({ text: 'Capture customer SA ID number and passport number' }, active, { dismissals });
+  const m = r.applicable.find((x) => x.ruleId === 'popia-identifiers');
+  assert.ok(m && m.why.reopened.length);
+});
+
+test('an approval goes stale when the work grows to new phrases', () => {
+  const fp = answersFingerprint(goodAnswers['popia-identifiers'], idRule[0]);
+  const record = { answers: goodAnswers, approvals: { 'popia-identifiers': { by: 'io', at: 2000, fingerprint: fp, scope: ['employee number'] } } };
+  assert.equal(evaluate({ text: 'Store employee number' }, idRule, record).stages.build.status, 'clear');
+  const grown = evaluate({ text: 'Store employee number, SA ID number and passport number' }, idRule, record);
+  assert.equal(grown.stages.build.status, 'blocked');
+  assert.match(grown.stages.build.open[0].reason, /now also mentions/);
+});
+
+test('"Yes" with no active declaration rule blocks instead of silently passing', () => {
+  const r = evaluate({ text: 'Tweak onboarding copy' }, active, { declaration: { value: 'yes' } }, { declarationRuleId: null });
+  assert.equal(r.stages.build.status, 'blocked');
+  assert.match(r.stages.build.summary, /no active rule handles declarations/);
+});
+
+test('stemmer: diagnoses, gps and apostrophes', () => {
+  assert.equal(stem('diagnoses'), 'diagnosis');
+  assert.equal(stem('gps'), 'gps');
+  assert.deepEqual(findKeywordHits("export the children's data", ["children's data"]), ["children's data"]);
 });

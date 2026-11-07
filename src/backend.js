@@ -6,7 +6,7 @@
 import {
   assess, syncIndexes, proposeAnswer, requestApproval, flagRule, draftRuleFromPolicy, onIssueDeleted, declare, PreflightError,
 } from './service.js';
-import { getRules, saveRules, getSettings, markGateSeen, appendAudit } from './store.js';
+import { getRules, saveRules, getSettings, markGateSeen, appendAudit, listQueue } from './store.js';
 import { redact } from './engine/evaluate.js';
 import { POPIA_RULES, POPIA_PACK_ID } from './rulepacks/popia.js';
 
@@ -22,7 +22,8 @@ import { POPIA_RULES, POPIA_PACK_ID } from './rulepacks/popia.js';
  */
 async function validate(issue, stage) {
   try {
-    const { workItem, result } = await assess(issue.id || issue.key, { asUser: false });
+    // Read-only: the gate never writes evidence (sticky matches are saved by triggers and the panel).
+    const { workItem, result } = await assess(issue.id || issue.key, { asUser: false, persist: false });
     await markGateSeen(workItem.projectKey, workItem.key, stage).catch(() => {});
     const view = stage === 'build' ? result.stages.build : result.stages.done;
     if (view.status === 'blocked') {
@@ -63,6 +64,19 @@ export async function onIssueChanged(event) {
   }
 }
 
+/** Daily: re-evaluate everything in the inbox, so expired exceptions and stale entries update JQL and the inbox. */
+export async function onDaily() {
+  const entries = (await listQueue()).slice(0, 300);
+  for (const e of entries) {
+    try {
+      const { workItem, result } = await assess(e.issueId, { asUser: false });
+      await syncIndexes(workItem, result);
+    } catch (error) {
+      console.warn('Preflight daily resync skipped', e.key, error.message);
+    }
+  }
+}
+
 export async function onIssueDeletedEvent(event) {
   const issueId = event?.issue?.id;
   if (issueId) await onIssueDeleted(issueId, event?.issue?.key).catch((e) => console.error('Preflight delete cleanup failed', e.message));
@@ -80,7 +94,11 @@ export async function onInstalled() {
 /* Rovo actions (some also exposed as MCP tools)                       */
 /* ------------------------------------------------------------------ */
 
-const issueKeyFrom = (p) => p?.issueKey || p?.context?.jira?.issueKey || p?.context?.jira?.issueId || null;
+/**
+ * Prefer the work item the user has open (context) over a key in the payload, so
+ * instructions injected into one ticket cannot steer the agent to act on another.
+ */
+const issueKeyFrom = (p) => p?.context?.jira?.issueKey || p?.context?.jira?.issueId || p?.issueKey || null;
 const actorFrom = (p, c) => c?.principal?.accountId || p?.context?.principal?.accountId || p?.context?.accountId || 'unknown-user';
 const fail = (message) => ({ ok: false, error: message });
 

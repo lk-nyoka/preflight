@@ -8,6 +8,7 @@ export {
   onIssueChanged,
   onIssueDeletedEvent,
   onInstalled,
+  onDaily,
   actionCheckIssue,
   actionListRules,
   actionProposeAnswer,

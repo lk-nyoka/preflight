@@ -53,12 +53,16 @@ function NextStep({ state, act, busy }) {
     return <SectionMessage appearance="discovery" title="An approver recorded a time-limited exception"><Text>Work can proceed. See the exception below.</Text></SectionMessage>;
   }
   if (build.status === 'blocked') {
+    if (build.declarationRuleMissing) {
+      return <SectionMessage appearance="warning" title="A rule is missing"><Text>{build.summary}</Text></SectionMessage>;
+    }
     const inputs = build.open.filter((o) => o.type !== 'approval');
+    const needsApproval = build.open.some((o) => o.type === 'approval');
     if (inputs.length) {
       return (
         <SectionMessage appearance="warning" title={`Next: answer ${plural(inputs.length, 'question')} before work starts`}>
-          <Text>Fill them in below and click Save. Then this is approved by:</Text>
-          <Approvers state={state} />
+          <Text>Fill them in below and click Save.{needsApproval ? ' Then this is approved by:' : ' No approval is needed for these rules.'}</Text>
+          {needsApproval && <Approvers state={state} />}
         </SectionMessage>
       );
     }
@@ -155,6 +159,7 @@ function RuleCard({ match, state, act, busy }) {
           {why.labels.length ? ` label ${why.labels.join(', ')}` : ''}
           {why.declared ? 'you declared this work affects personal information' : why.manual ? 'flagged by a teammate' : ''}
           {why.sticky ? `matched earlier ("${(why.firstMatched?.phrases || []).join('", "')}"); it stays until an approver dismisses it` : ''}
+          {why.reopened?.length ? `. Re-opened: it was dismissed earlier, but now also mentions "${why.reopened.join('", "')}"` : ''}
         </Text>
         {why.snippet && <Text><Em>{why.snippet}</Em></Text>}
 
@@ -306,6 +311,7 @@ const App = () => {
             <User accountId={state.exception.by} />
             <Text>{state.exception.reason}. Granted {when(state.exception.at)}, expires {when(state.exception.expiresAt)}.</Text>
           </Inline>
+          <Text><Em>Covers only the rules that were open when it was granted. Rules that match later are not waived.</Em></Text>
           {state.canApprove && <Inline><Button appearance="subtle" isDisabled={busy} onClick={() => act('clearException')}>Withdraw exception</Button></Inline>}
         </SectionMessage>
       )}

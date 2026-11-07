@@ -7,9 +7,10 @@
  */
 import Resolver from '@forge/resolver';
 import { evaluate } from '../engine/evaluate.js';
-import { getRules, saveRules, getSettings, getGates, appendAudit, listAudit } from '../store.js';
+import { getRules, getSettings, getGates, appendAudit, listAudit } from '../store.js';
 import {
-  saveRuleChange, setRuleStatusChange, deleteRuleChange, setApprovers, resetApprovers, setPolicy, pendingRuleChanges,
+  saveRuleChange, setRuleStatusChange, deleteRuleChange, setApprovers, requestReset, setPolicy, pendingRuleChanges,
+  withdrawProposal, applyDueReset, requireApproverForBulk, replacePack,
 } from '../governance.js';
 import { currentUserIsJiraAdmin, getCreatableIssueTypes, createIssue, getWorkflowCoverage } from '../jira.js';
 import { POPIA_RULES, POPIA_PACK_ID, DEMO_ISSUES } from '../rulepacks/popia.js';
@@ -31,17 +32,10 @@ function define(name, fn) {
   });
 }
 
-/** Bulk rule changes bypass per-rule proposals, so in named-approver mode only an approver may run them. */
-async function requireApproverForBulk(req) {
-  const settings = await getSettings();
-  if (settings.approverAccountIds.length && !settings.approverAccountIds.includes(req.context.accountId)) {
-    throw new PreflightError('Approvers are named, so only an approver can reload or reset the rule pack.');
-  }
-}
-
 const audit = (req, event, details = {}) => appendAudit('admin', { by: req.context.accountId, via: 'admin', event, ...details });
 
 async function adminState(req, extra = {}) {
+  await applyDueReset();
   const [rules, settings, gates, log, pending] = await Promise.all([
     getRules(), getSettings(), getGates(), listAudit('admin', { limit: 40 }), pendingRuleChanges(),
   ]);
@@ -96,28 +90,21 @@ define('testText', async (req) => {
 });
 
 define('resetPack', async (req) => {
-  await requireApproverForBulk(req);
-  const custom = (await getRules()).filter((r) => !isPackRule(r));
-  const now = Date.now();
-  await saveRules([...POPIA_RULES.map((r) => ({ ...r, status: 'draft', pack: POPIA_PACK_ID, updatedAt: now })), ...custom]);
+  await requireApproverForBulk(req.context.accountId);
+  await replacePack(POPIA_RULES, POPIA_PACK_ID, 'draft', req.context.accountId);
   await audit(req, 'Restored the POPIA starter pack as drafts');
   return adminState(req, { notice: 'POPIA starter pack restored as drafts.' });
 });
 
-/** One click: activate the POPIA pack, turn on the declaration step, and create five sample work items. */
+/** One click: activate the POPIA pack and create five sample work items. */
 define('loadDemo', async (req) => {
-  await requireApproverForBulk(req);
+  await requireApproverForBulk(req.context.accountId);
   const projectKey = String(req.payload.projectKey || '').trim().toUpperCase();
   if (!/^[A-Z][A-Z0-9_]{1,9}$/.test(projectKey)) throw new PreflightError('Enter a project key such as PRIV.');
-  const now = Date.now();
-  const custom = (await getRules()).filter((r) => !isPackRule(r));
-  await saveRules([
-    ...POPIA_RULES.map((r) => ({ ...r, status: 'active', pack: POPIA_PACK_ID, updatedAt: now, activatedBy: req.context.accountId, activatedAt: now })),
-    ...custom,
-  ]);
   const types = await getCreatableIssueTypes(projectKey);
   const type = types.find((t) => /task/i.test(t.name)) || types[0];
   if (!type) throw new PreflightError(`No work types can be created in ${projectKey}.`);
+  await replacePack(POPIA_RULES, POPIA_PACK_ID, 'active', req.context.accountId);
   const created = [];
   for (const demo of DEMO_ISSUES) {
     const issue = await createIssue(projectKey, type.id, demo.summary, demo.description);
@@ -141,15 +128,21 @@ define('saveSettings', async (req) => {
   return adminState(req, { notice: 'Settings saved.' });
 });
 
-define('resetApprovers', async (req) => {
-  await resetApprovers(req.context.accountId, req.payload.reason);
-  return adminState(req, { notice: 'Reset to small-team mode. This is recorded in the audit log.' });
+define('requestReset', async (req) => {
+  await requestReset(req.context.accountId, req.payload.reason);
+  return adminState(req, { notice: 'Reset requested. It takes effect in 72 hours unless an approver cancels it, and you cannot name yourself approver afterwards.' });
+});
+
+define('withdrawProposal', async (req) => {
+  await withdrawProposal(req.payload.id, req.context.accountId);
+  return adminState(req);
 });
 
 define('checkCoverage', async (req) => {
   try {
     const rows = await getWorkflowCoverage({ buildKey: 'preflight-build-gate', doneKey: 'preflight-done-gate' });
-    return { ok: true, coverage: rows };
+    if (!rows.length) return { ok: true, coverage: null, coverageError: 'Preflight could not find any transitions into In Progress or Done statuses. Coverage is unknown, so check each workflow by hand.' };
+    return { ok: true, coverage: rows, workflows: new Set(rows.map((r) => r.workflow)).size };
   } catch (error) {
     return { ok: true, coverage: null, coverageError: `Could not read workflows: ${error.message}` };
   }

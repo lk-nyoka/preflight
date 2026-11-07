@@ -112,8 +112,13 @@ export const POPIA_RULES = [
         'home address', 'physical address', 'residential address', 'postal address', 'date of birth',
         'gps', 'geolocation', 'location tracking', 'live location', 'ip address', 'device id', 'customer name',
         'full name', 'next of kin', 'emergency contact', 'salary', 'payslip', 'monthly income', 'income detail', 'credit score', 'bank detail',
+        'personal information', 'personal data', 'pii', 'popi', 'sensitive data', 'customer record', 'employee record', 'hr record',
+        'staff record', 'patient record', 'cctv', 'camera footage', 'credit bureau', 'credit check', 'tracking pixel', 'facebook pixel',
+        'meta pixel', 'cookie consent', 'third party cookie', 'data subject access', 'subject access request', 'download all their data',
+        'download their personal data', 'right to be forgotten', 'delete my account',
       ],
       contextual: [
+        { terms: ['footage', 'recording'], with: ['visitor', 'cctv', 'camera', 'retain', 'retention', 'store', 'customer', 'call'] },
         { terms: ['location'], with: ['track', 'tracking', 'employee', 'driver', 'user', 'customer', 'live', 'real time', 'history'] },
         { terms: ['contact', 'contacts', 'customer list', 'user list', 'mailing list'], with: ['import', 'export', 'sync', 'upload', 'crm', 'hubspot', 'salesforce', 'share'] },
       ],
@@ -144,12 +149,17 @@ export const POPIA_RULES = [
       'This work may involve special personal information (health, biometric, religion, race or ethnic origin, trade union, political persuasion, sex life or criminal behaviour). Record which section 27 authorisation your organisation relies on and the security review.',
     triggers: {
       keywords: [
-        'medical', 'health data', 'health record', 'health information', 'diagnosis', 'allergy', 'allergies',
+        'medical', 'health data', 'health record', 'health information', 'allergy', 'allergies',
         'disability', 'biometric', 'fingerprint', 'face recognition', 'facial recognition', 'face id', 'religion',
         'religious', 'racial', 'race or ethnic', 'ethnicity', 'ethnic origin', 'trade union', 'union membership',
-        'criminal record', 'criminal behaviour', 'sex life', 'sexual orientation', 'hiv status',
+        'criminal record', 'criminal behaviour', 'sex life', 'sexual orientation', 'hiv status', 'employment equity', 'sick note', 'medical certificate',
       ],
-      contextual: [{ terms: ['political'], with: ['opinion', 'affiliation', 'persuasion', 'views', 'membership', 'voter', 'belief'] }],
+      contextual: [
+        { terms: ['political'], with: ['opinion', 'affiliation', 'persuasion', 'views', 'membership', 'voter', 'belief'] },
+        { terms: ['race', 'gender'], with: ['employee', 'staff', 'field', 'report', 'b bbee', 'bbbee', 'demographic', 'equity', 'applicant', 'customer'] },
+        { terms: ['diagnosis', 'diagnose'], with: ['patient', 'employee', 'staff', 'member', 'customer', 'leave', 'record', 'learner'] },
+      ],
+      exclude: ['diagnosis log', 'diagnosis logs', 'race to', 'gender neutral wording'],
       labels: ['special-pi'],
     },
     requirements: [
@@ -166,6 +176,7 @@ export const POPIA_RULES = [
           'Historical, statistical or research purposes',
           'Information deliberately made public by the data subject',
           'Authorisation from the Information Regulator',
+          'A specific authorisation in sections 28 to 33 (for example s32 health, s33 criminal behaviour)',
         ],
       },
       approval('Special personal information always needs approver sign-off.'),
@@ -186,10 +197,12 @@ export const POPIA_RULES = [
       'This work may involve personal information of children (under 18). Record how consent from a parent or guardian (or another section 35 authorisation) is obtained and how age is determined.',
     triggers: {
       // Avoids bare "child" and "minor": in Jira they usually mean child issues or minor versions.
-      keywords: ['learner', 'pupil', 'under 18', 'under 13', 'kid', 'children s data', 'child data', 'parental consent', 'parent consent', 'school learner', 'minor s data'],
+      keywords: ['pupil', 'under 18', 'under 13', "children's data", 'child data', 'parental consent', 'parent consent', 'school learner', "minor's data"],
       contextual: [
         { terms: ['child', 'children', 'minor'], with: ['age', 'parent', 'school', 'profile', 'data', 'account', 'photo', 'consent'] },
         { terms: ['guardian'], with: ['parent', 'child', 'consent', 'learner', 'minor', 'school', 'kid'] },
+        { terms: ['learner'], with: ['school', 'age', 'aged', 'parent', 'grade', 'registration', 'teacher', 'class', 'progress', 'allergy', 'medical', 'photo', 'disability', 'trip'] },
+        { terms: ['kid'], with: ['profile', 'account', 'data', 'photo', 'app', 'age', 'parent', 'register'] },
       ],
       labels: ['children'],
     },
@@ -212,8 +225,11 @@ export const POPIA_RULES = [
     summary:
       'This work may send electronic direct marketing (email, SMS, WhatsApp, automated calls). Record the basis for contacting each recipient and how every message offers an opt-out.',
     triggers: {
-      keywords: ['marketing email', 'marketing sms', 'newsletter', 'bulk sms', 'sms blast', 'whatsapp broadcast', 'mailing list', 'drip campaign', 'cold email', 'direct marketing', 'upsell email', 'email blast'],
-      contextual: [{ terms: ['promo', 'promotional', 'campaign', 'offer'], with: ['sms', 'email', 'whatsapp', 'send', 'blast', 'broadcast', 'message', 'push notification', 'customers', 'subscriber'] }],
+      keywords: ['marketing email', 'marketing sms', 'marketing message', 'newsletter', 'bulk sms', 'sms blast', 'whatsapp broadcast', 'mailing list', 'drip campaign', 'cold email', 'direct marketing', 'upsell email', 'email blast'],
+      contextual: [
+        { terms: ['promo', 'promotional', 'campaign', 'offer'], with: ['sms', 'email', 'whatsapp', 'send', 'blast', 'broadcast', 'message', 'push notification', 'customers', 'subscriber'] },
+        { terms: ['whatsapp', 'sms', 'email'], with: ['marketing', 'promo', 'promotional', 'campaign', 'opted in', 'opt in', 'broadcast', 'newsletter', 'sale'] },
+      ],
       labels: ['marketing'],
     },
     requirements: [
@@ -233,8 +249,10 @@ export const POPIA_RULES = [
     severity: 'high',
     summary: 'This work may send personal information to a recipient outside South Africa. Record the destination and which section 72 ground your organisation relies on.',
     triggers: {
-      keywords: ['offshore', 'overseas', 'us region', 'eu region', 'us east', 'eu west', 'transfer abroad', 'outside south africa', 'international vendor', 'us based', 'sync to hubspot', 'sync to salesforce', 'sync to mailchimp'],
+      keywords: ['transfer abroad', 'outside south africa', 'international vendor', 'us based', 'sync to hubspot', 'sync to salesforce', 'sync to mailchimp', 'offshore vendor', 'offshore team'],
       contextual: [
+        { terms: ['offshore', 'overseas', 'us region', 'eu region', 'us east', 'eu west', 'eu central', 'af south'], with: ['customer', 'user', 'personal', 'data', 'record', 'backup', 'database', 'hr', 'patient', 'employee', 'member', 'learner', 'pii'] },
+        { terms: ['workday', 'successfactors', 'bamboohr', 'freshdesk'], with: ['migrate', 'move', 'sync', 'export', 'eu', 'europe', 'us', 'record'] },
         { terms: ['hubspot', 'salesforce', 'mailchimp', 'zendesk', 'intercom', 'google analytics', 'mixpanel'],
           with: ['sync', 'import', 'export', 'push', 'send', 'integrate', 'integration', 'lead', 'contact', 'customer', 'user', 'migrate', 'move', 'backup'] },
         { terms: ['vendor', 'third party', 'crm'], with: ['usa', 'united states', 'europe', 'uk', 'india', 'abroad', 'international', 'foreign', 'cloud region', 'us based', 'us hosted'] },
@@ -254,6 +272,7 @@ export const POPIA_RULES = [
           'Recipient bound by law, rules or agreement giving adequate protection',
           'Data subject consented to the transfer',
           'Necessary to perform a contract with the data subject',
+          'Necessary for a contract in the data subject\'s interest between the organisation and a third party',
           'For the benefit of the data subject and consent not reasonably obtainable',
         ],
       },
