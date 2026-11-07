@@ -103,12 +103,23 @@ define('loadDemo', async (req) => {
   const types = await getCreatableIssueTypes(projectKey);
   const type = types.find((t) => /task/i.test(t.name)) || types[0];
   if (!type) throw new PreflightError(`No work types can be created in ${projectKey}.`);
-  await replacePack(POPIA_RULES, POPIA_PACK_ID, 'active', req.context.accountId);
+  // Create the work items first, so a permission problem leaves the rules untouched.
   const created = [];
   for (const demo of DEMO_ISSUES) {
-    const issue = await createIssue(projectKey, type.id, demo.summary, demo.description);
-    created.push(issue.key);
+    try {
+      const issue = await createIssue(projectKey, type.id, demo.summary, demo.description);
+      created.push(issue.key);
+    } catch (error) {
+      if (/permission/i.test(error.message)) {
+        throw new PreflightError(`Jira would not let Preflight create work items in ${projectKey}${created.length ? ` (created ${created.join(', ')} before stopping)` : ''}. ` +
+          'Apps act through the project role "atlassian-addons-project-access". In Project settings > Permissions, make sure "Create work items", ' +
+          '"Browse projects", "Edit work items" and "Add comments" include that role and "Application access: Any logged in user". ' +
+          'In a team-managed project, set Access to Open, or use a company-managed project.');
+      }
+      throw error;
+    }
   }
+  await replacePack(POPIA_RULES, POPIA_PACK_ID, 'active', req.context.accountId);
   await audit(req, `Loaded demo in ${projectKey}: activated POPIA starter pack, created ${created.join(', ')}`);
   return adminState(req, { notice: `Activated the POPIA starter pack and created ${created.join(', ')}.`, created });
 });
