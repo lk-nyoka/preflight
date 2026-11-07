@@ -1,74 +1,111 @@
 /**
- * Preflight service layer.
+ * Preflight service layer: every read and write goes through here.
  *
- * Every surface (issue panel, Rovo actions, MCP tools, validator, trigger)
- * goes through these functions, so rules about who may do what live in one
- * place. AI never approves anything: approve/dismiss/exception all require a
- * human approver, checked here on the server.
+ * Governance rules enforced on the server:
+ *   - AI never approves, dismisses, grants exceptions or activates rules.
+ *   - Rovo can only PROPOSE answers. A proposal does not count until a person
+ *     confirms it in the issue panel (saveAnswers is panel-only).
+ *   - Once approvers are named, only they can approve; a Jira admin is not
+ *     automatically the Information Officer. Small-team mode (no named
+ *     approvers) lets Jira admins approve and is labelled as such.
+ *   - Every change writes a write-once audit event.
  */
-import { evaluate, answersFingerprint } from './engine/evaluate.js';
-import { getRules, saveRules, getSettings, getRecord, updateRecord } from './store.js';
+import { evaluate, answersFingerprint, redact, stageOf } from './engine/evaluate.js';
+import {
+  getRules, getSettings, getRecord, updateRecord, appendAudit, setQueueEntry, deleteRecord,
+} from './store.js';
 import { getWorkItem, currentUserIsJiraAdmin, setPreflightProperty, getPreflightProperty, addComment } from './jira.js';
-
 import { PreflightError } from './errors.js';
-import { cleanRule } from './rules.js';
+import { DECLARATION_RULE_ID } from './rulepacks/popia.js';
 
 export { PreflightError };
 
 const APPROVAL_REQUEST_COOLDOWN_MS = 10 * 60 * 1000;
 
-/** Load the work item, rules and evidence, and run the engine. */
-export async function assess(issueIdOrKey, { asUser = true } = {}) {
-  const workItem = await getWorkItem(issueIdOrKey, { asUser });
-  const [rules, record] = await Promise.all([getRules(), getRecord(workItem.id)]);
-  let result = evaluate(workItem, rules, record);
-
-  // Remember every rule that has matched by phrase or label, so it stays
-  // applicable if the ticket text is reworded later (see engine "sticky").
-  const newlyMatched = result.applicable.filter(
-    (m) => !record.matched?.[m.ruleId] && (m.why.keywords.length || m.why.labels.length),
-  );
-  if (newlyMatched.length) {
-    const saved = await updateRecord(
-      workItem.id,
-      'app',
-      `Matched ${newlyMatched.map((m) => `"${m.title}" (${[...m.why.keywords, ...m.why.labels].join(', ')})`).join('; ')}`,
-      (rec) => {
-        rec.matched = rec.matched || {};
-        for (const m of newlyMatched) rec.matched[m.ruleId] = { at: Date.now(), phrases: [...m.why.keywords, ...m.why.labels] };
-      },
-    );
-    result = evaluate(workItem, rules, saved);
-    return { workItem, rules, record: saved, result };
-  }
-  return { workItem, rules, record, result };
+export function evalOptions(rules, settings) {
+  return {
+    declarationRuleId: rules.some((r) => r.id === DECLARATION_RULE_ID && r.status === 'active') ? DECLARATION_RULE_ID : null,
+    requireDeclaration: Boolean(settings.requireDeclaration),
+  };
 }
 
-/** Keep the JQL-searchable mirror in step with the latest evaluation. */
-export async function syncProperty(workItem, result) {
+/** Load work item, rules, settings and evidence, and run the engine. */
+export async function assess(issueIdOrKey, { asUser = true } = {}) {
+  const workItem = await getWorkItem(issueIdOrKey, { asUser });
+  const [rules, settings, record] = await Promise.all([getRules(), getSettings(), getRecord(workItem.id)]);
+  const opts = evalOptions(rules, settings);
+  let result = evaluate(workItem, rules, record, opts);
+
+  // Remember rules that matched by phrase or label so rewording cannot remove them.
+  const newlyMatched = result.applicable.filter((m) => !record.matched?.[m.ruleId] && (m.why.keywords.length || m.why.labels.length));
+  if (newlyMatched.length) {
+    try {
+      const saved = await updateRecord(
+        workItem.id,
+        'app',
+        `Matched ${newlyMatched.map((m) => `"${m.title}" (${[...m.why.keywords, ...m.why.labels].join(', ')})`).join('; ')}`,
+        (rec) => {
+          rec.matched = rec.matched || {};
+          for (const m of newlyMatched) {
+            rec.matched[m.ruleId] = { at: Date.now(), phrases: [...m.why.keywords, ...m.why.labels], ruleVersion: m.ruleVersion };
+          }
+        },
+        { via: 'engine', ruleIds: newlyMatched.map((m) => m.ruleId) },
+      );
+      result = evaluate(workItem, rules, saved, opts);
+      return { workItem, rules, settings, record: saved, result };
+    } catch (error) {
+      // Busy lock: the live text still matches, so the evaluation is correct; persist next time.
+      if (error.code !== 'BUSY') throw error;
+    }
+  }
+  return { workItem, rules, settings, record, result };
+}
+
+/** Keep the JQL mirror and the approvals inbox in step. Neither is ever used for enforcement. */
+export async function syncIndexes(workItem, result) {
   const next = {
     status: result.status,
+    build: result.stages.build.status,
     open: result.openCount,
+    awaiting: result.awaitingApproval ? 'yes' : 'no',
     rules: result.applicable.map((m) => m.ruleId),
   };
-  const current = await getPreflightProperty(workItem.id);
+  const current = await getPreflightProperty(workItem.id).catch(() => null);
   const changed =
-    !current || current.status !== next.status || current.open !== next.open || current.rules?.join() !== next.rules.join();
+    !current || current.status !== next.status || current.build !== next.build || current.open !== next.open ||
+    current.awaiting !== next.awaiting || current.rules?.join() !== next.rules.join();
   if (changed) await setPreflightProperty(workItem.id, { ...next, evaluatedAt: Date.now() });
+
+  const reviewOpen = result.status === 'blocked' || result.stages.build.status === 'blocked';
+  await setQueueEntry(
+    workItem.id,
+    reviewOpen
+      ? {
+          issueId: workItem.id,
+          key: workItem.key,
+          summary: redact(workItem.summary).slice(0, 200),
+          projectKey: workItem.projectKey,
+          awaitingApproval: result.awaitingApproval,
+          buildStatus: result.stages.build.status,
+          openBuild: result.stages.build.open.length,
+          openTotal: result.openCount,
+          rules: result.applicable.map((m) => m.title),
+          updatedAt: Date.now(),
+        }
+      : null,
+  );
   return changed;
 }
 
-/**
- * Who may approve. Once approvers are configured, ONLY they can approve: a Jira
- * admin is not automatically the Information Officer. With no approvers
- * configured, Preflight runs in "small-team mode" and Jira admins approve.
- * Only valid for the signed-in user.
- */
+/* ---------------- who may approve ---------------- */
+
 export async function approverMode() {
   const settings = await getSettings();
   return settings.approverAccountIds.length ? 'named-approvers' : 'small-team';
 }
 
+/** Only valid for the signed-in user (uses their Jira permissions). */
 export async function canCurrentUserApprove(accountId) {
   const settings = await getSettings();
   if (settings.approverAccountIds.length) return settings.approverAccountIds.includes(accountId);
@@ -77,7 +114,10 @@ export async function canCurrentUserApprove(accountId) {
 
 async function requireApprover(accountId, workItem) {
   if (!(await canCurrentUserApprove(accountId))) {
-    throw new PreflightError('Only a Preflight approver (or a Jira admin) can do this.');
+    const mode = await approverMode();
+    throw new PreflightError(
+      mode === 'named-approvers' ? 'Only a named Preflight approver can do this.' : 'Only a Jira admin can do this in small-team mode.',
+    );
   }
   const settings = await getSettings();
   if (settings.separationOfDuties && workItem?.reporterAccountId === accountId) {
@@ -91,35 +131,100 @@ function findApplicable(result, ruleId) {
   return match;
 }
 
-/** Save answers to the non-approval requirements of one rule. Anyone who can see the issue may answer. */
-export async function saveAnswers(issueIdOrKey, ruleId, answers, actor, via = 'panel') {
+/* ---------------- answers ---------------- */
+
+/** Save answers a PERSON typed or confirmed in the panel. The only way a requirement becomes satisfied. */
+export async function saveAnswers(issueIdOrKey, ruleId, answers, actor) {
   const { workItem, rules, result } = await assess(issueIdOrKey);
   findApplicable(result, ruleId);
   const rule = rules.find((r) => r.id === ruleId);
-  const allowed = new Set(rule.requirements.filter((r) => r.type !== 'approval').map((r) => r.id));
+  const allowed = new Map(rule.requirements.filter((r) => r.type !== 'approval').map((r) => [r.id, r]));
   const clean = {};
   for (const [reqId, value] of Object.entries(answers || {})) {
     if (!allowed.has(reqId)) throw new PreflightError(`Unknown requirement "${reqId}" for ${rule.title}.`);
-    clean[reqId] = { value: String(value ?? '').slice(0, 2000), by: actor, at: Date.now(), via };
+    clean[reqId] = { value: String(value ?? '').slice(0, 2000), by: actor, at: Date.now() };
   }
-  await updateRecord(workItem.id, actor, `Answered ${Object.keys(clean).join(', ')} for "${rule.title}" (${via})`, (rec) => {
-    rec.answers[ruleId] = { ...(rec.answers[ruleId] || {}), ...clean };
-  });
+  if (!Object.keys(clean).length) throw new PreflightError('Nothing to save.');
+  await updateRecord(
+    workItem.id,
+    actor,
+    `Answered ${[...Object.keys(clean)].map((id) => allowed.get(id).label).join(', ')} for "${rule.title}"`,
+    (rec) => {
+      rec.answers[ruleId] = { ...(rec.answers[ruleId] || {}), ...clean };
+      for (const reqId of Object.keys(clean)) if (rec.drafts?.[ruleId]) delete rec.drafts[ruleId][reqId];
+    },
+    { ruleId, requirementIds: Object.keys(clean), ruleVersion: rule.updatedAt || null },
+  );
   return refresh(workItem.id);
 }
 
+/**
+ * Rovo PROPOSES an answer. It is stored as a draft and shown in the panel with
+ * "Use draft" / "Discard". It never satisfies a requirement by itself.
+ */
+export async function proposeAnswer(issueIdOrKey, ruleId, requirementId, value, actor) {
+  const { workItem, rules, result } = await assess(issueIdOrKey);
+  findApplicable(result, ruleId);
+  const rule = rules.find((r) => r.id === ruleId);
+  const req = rule.requirements.find((r) => r.id === requirementId);
+  if (!req) throw new PreflightError(`Unknown requirement "${requirementId}".`);
+  if (req.type === 'approval') throw new PreflightError('Approvals cannot be drafted. Only a human approver can approve.');
+  const text = String(value ?? '').trim().slice(0, 2000);
+  if (!text) throw new PreflightError('The proposed answer is empty.');
+  if (req.type === 'choice' && !req.options.includes(text)) {
+    throw new PreflightError(`For "${req.label}" the answer must be exactly one of: ${req.options.join(' | ')}`);
+  }
+  await updateRecord(
+    workItem.id,
+    actor,
+    `Rovo proposed an answer for ${req.label} ("${rule.title}"); waiting for a person to confirm`,
+    (rec) => {
+      rec.drafts = rec.drafts || {};
+      rec.drafts[ruleId] = { ...(rec.drafts[ruleId] || {}), [requirementId]: { value: text, for: actor, at: Date.now() } };
+    },
+    { via: 'agent', ruleId, requirementIds: [requirementId] },
+  );
+  return refresh(workItem.id);
+}
+
+export async function discardDraft(issueIdOrKey, ruleId, requirementId, actor) {
+  const { workItem } = await assess(issueIdOrKey);
+  await updateRecord(workItem.id, actor, `Discarded a Rovo draft for ${requirementId}`, (rec) => {
+    if (rec.drafts?.[ruleId]) delete rec.drafts[ruleId][requirementId];
+  }, { ruleId, requirementIds: [requirementId] });
+  return refresh(workItem.id);
+}
+
+/** Yes / No / Unsure: does this change affect personal information? */
+export async function declare(issueIdOrKey, value, actor, via = 'panel') {
+  if (!['yes', 'no', 'unsure'].includes(value)) throw new PreflightError('Choose Yes, No or Unsure.');
+  const { workItem } = await assess(issueIdOrKey);
+  await updateRecord(workItem.id, actor, `Declared personal information impact: ${value}`, (rec) => {
+    rec.declaration = { value, by: actor, at: Date.now(), via };
+  }, { via });
+  return refresh(workItem.id);
+}
+
+/* ---------------- approver actions ---------------- */
+
 export async function approve(issueIdOrKey, ruleId, actor, note = '') {
-  const { workItem, record, result } = await assess(issueIdOrKey);
+  const { workItem, record, rules, result } = await assess(issueIdOrKey);
   await requireApprover(actor, workItem);
   const match = findApplicable(result, ruleId);
-  const unanswered = match.requirements.filter((r) => r.type !== 'approval' && !r.satisfied);
-  if (unanswered.length) {
-    throw new PreflightError(`Answer these first: ${unanswered.map((r) => r.label).join(', ')}.`);
-  }
-  const fingerprint = answersFingerprint(record.answers[ruleId] || {});
-  await updateRecord(workItem.id, actor, `Approved "${match.title}"${note ? `: ${note}` : ''}`, (rec) => {
-    rec.approvals[ruleId] = { by: actor, at: Date.now(), fingerprint, note: String(note).slice(0, 500) };
-  });
+  const unanswered = match.requirements.filter((r) => r.type !== 'approval' && r.stage === 'build' && !r.satisfied);
+  if (unanswered.length) throw new PreflightError(`Answer these first: ${unanswered.map((r) => r.label).join(', ')}.`);
+  const rule = rules.find((r) => r.id === ruleId);
+  if (!rule.requirements.some((r) => r.type === 'approval')) throw new PreflightError('This rule does not need approval.');
+  const fingerprint = answersFingerprint(record.answers[ruleId] || {}, rule);
+  await updateRecord(
+    workItem.id,
+    actor,
+    `Approved "${match.title}"${note ? `: ${note}` : ''}`,
+    (rec) => {
+      rec.approvals[ruleId] = { by: actor, at: Date.now(), fingerprint, ruleVersion: rule.updatedAt || null, note: String(note).slice(0, 500) };
+    },
+    { ruleId, ruleVersion: rule.updatedAt || null },
+  );
   return refresh(workItem.id);
 }
 
@@ -128,32 +233,32 @@ export async function revokeApproval(issueIdOrKey, ruleId, actor) {
   await requireApprover(actor, workItem);
   await updateRecord(workItem.id, actor, `Revoked approval for ${ruleId}`, (rec) => {
     delete rec.approvals[ruleId];
-  });
+  }, { ruleId });
   return refresh(workItem.id);
 }
 
-/** Anyone can flag a rule that keyword matching missed. Removing a flag needs an approver. */
-export async function flagRule(issueIdOrKey, ruleId, actor) {
+/** Anyone can flag a rule the matcher missed. Only an approver can remove one (dismiss). */
+export async function flagRule(issueIdOrKey, ruleId, actor, via = 'panel') {
   const { workItem, rules } = await assess(issueIdOrKey);
   const rule = rules.find((r) => r.id === ruleId && r.status === 'active');
   if (!rule) throw new PreflightError('That rule is not active.');
-  await updateRecord(workItem.id, actor, `Flagged "${rule.title}" manually`, (rec) => {
+  await updateRecord(workItem.id, actor, `Flagged "${rule.title}" as applying`, (rec) => {
     rec.manual = [...new Set([...(rec.manual || []), ruleId])];
     delete rec.dismissals[ruleId];
-  });
+  }, { via, ruleId });
   return refresh(workItem.id);
 }
 
-/** An approver marks a matched rule as not relevant (false positive), with a reason. */
+/** Approver: this rule does not apply to this work item (false positive). Needs a reason. */
 export async function dismissRule(issueIdOrKey, ruleId, actor, reason) {
-  if (!String(reason || '').trim()) throw new PreflightError('Give a reason for dismissing the rule.');
+  if (String(reason || '').trim().length < 10) throw new PreflightError('Give a reason (at least 10 characters) for dismissing the rule.');
   const { workItem, result } = await assess(issueIdOrKey);
   await requireApprover(actor, workItem);
   const match = findApplicable(result, ruleId);
   await updateRecord(workItem.id, actor, `Dismissed "${match.title}": ${reason}`, (rec) => {
     rec.dismissals[ruleId] = { by: actor, at: Date.now(), reason: String(reason).slice(0, 500) };
     rec.manual = (rec.manual || []).filter((id) => id !== ruleId);
-  });
+  }, { ruleId });
   return refresh(workItem.id);
 }
 
@@ -162,14 +267,14 @@ export async function restoreRule(issueIdOrKey, ruleId, actor) {
   await requireApprover(actor, workItem);
   await updateRecord(workItem.id, actor, `Restored ${ruleId}`, (rec) => {
     delete rec.dismissals[ruleId];
-  });
+  }, { ruleId });
   return refresh(workItem.id);
 }
 
-/** An exception: the rule applies, but an approver accepts a deviation for a limited time. */
+/** Exception: the rules apply, but an approver accepts a deviation for a limited time. */
 export async function setException(issueIdOrKey, actor, reason, days = 30) {
-  if (!String(reason || '').trim()) throw new PreflightError('Give a reason for the exception.');
-  const validDays = Math.min(365, Math.max(1, Math.round(Number(days) || 30)));
+  if (String(reason || '').trim().length < 10) throw new PreflightError('Give a reason (at least 10 characters) for the exception.');
+  const validDays = Math.min(90, Math.max(1, Math.round(Number(days) || 30)));
   const { workItem } = await assess(issueIdOrKey);
   await requireApprover(actor, workItem);
   const expiresAt = Date.now() + validDays * 24 * 60 * 60 * 1000;
@@ -188,19 +293,18 @@ export async function clearException(issueIdOrKey, actor) {
   return refresh(workItem.id);
 }
 
-/** Post a comment that @mentions the configured approvers and lists what is waiting on them. */
+/** Comment that @mentions the approvers with what is waiting on them. Rate-limited per work item. */
 export async function requestApproval(issueIdOrKey, actor, message = '', via = 'panel') {
   const { workItem, result, record } = await assess(issueIdOrKey);
-  if (result.status !== 'blocked') return { posted: false, reason: `Nothing to approve: ${result.summary}` };
+  if (result.status !== 'blocked' && result.stages.build.status !== 'blocked') {
+    return { posted: false, reason: `Nothing to approve: ${result.summary}` };
+  }
   const since = Date.now() - (record.lastApprovalRequestAt || 0);
   if (since < APPROVAL_REQUEST_COOLDOWN_MS) {
     return { posted: false, reason: `Approval was already requested ${Math.round(since / 60000)} minute(s) ago. Try again later.` };
   }
   const settings = await getSettings();
-  const mentions = settings.approverAccountIds.slice(0, 5).flatMap((id) => [
-    { type: 'mention', attrs: { id } },
-    { type: 'text', text: ' ' },
-  ]);
+  const mentions = settings.approverAccountIds.slice(0, 5).flatMap((id) => [{ type: 'mention', attrs: { id } }, { type: 'text', text: ' ' }]);
   const lines = result.open.map((o) => `• ${o.ruleTitle} (${o.ruleClause}): ${o.label}, ${o.reason.toLowerCase()}`);
   const body = {
     type: 'doc',
@@ -210,49 +314,39 @@ export async function requestApproval(issueIdOrKey, actor, message = '', via = '
         type: 'paragraph',
         content: [
           { type: 'text', text: 'Preflight review requested ', marks: [{ type: 'strong' }] },
-          ...(mentions.length ? mentions : [{ type: 'text', text: '(no approvers configured; Jira admins can approve) ' }]),
+          ...(mentions.length ? mentions : [{ type: 'text', text: '(small-team mode: any Jira admin can approve) ' }]),
         ],
       },
-      ...(message ? [{ type: 'paragraph', content: [{ type: 'text', text: String(message).slice(0, 1000) }] }] : []),
+      ...(message ? [{ type: 'paragraph', content: [{ type: 'text', text: redact(String(message)).slice(0, 1000) }] }] : []),
       ...lines.map((line) => ({ type: 'paragraph', content: [{ type: 'text', text: line }] })),
     ],
   };
   await addComment(workItem.key, body);
-  await updateRecord(workItem.id, actor, `Requested approval (${via})`, (rec) => {
+  await updateRecord(workItem.id, actor, 'Requested approval', (rec) => {
     rec.lastApprovalRequestAt = Date.now();
-  });
+  }, { via });
   return { posted: true, notified: settings.approverAccountIds.length, open: result.openCount };
 }
 
-/**
- * Save a DRAFT rule proposed by the Rovo agent from a policy page. Only Jira
- * admins may do this, drafts are never enforced, and a human must activate it
- * on the admin page.
- */
-export async function draftRuleFromPolicy(input, actor) {
-  if (!(await currentUserIsJiraAdmin())) throw new PreflightError('Only Jira administrators can add Preflight rules.');
-  const rules = await getRules();
-  let id = String(input.ruleId || input.title || '')
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-|-$/g, '')
-    .slice(0, 50);
-  if (id.length < 3) id = `rule-${Date.now().toString(36)}`;
-  while (rules.some((r) => r.id === id)) id = `${id.slice(0, 45)}-${Math.random().toString(36).slice(2, 5)}`;
-  const rule = cleanRule({ ...input, id }, null);
-  rule.status = 'draft';
-  rule.source = { kind: 'rovo-draft', url: input.sourceUrl || null, by: actor, at: Date.now() };
-  await saveRules([...rules, rule]);
-  return rule;
+export { draftRuleFromPolicy } from './governance.js';
+
+/* ---------------- lifecycle ---------------- */
+
+/** When a work item is deleted, delete its evidence (POPIA s14 spirit). The audit history is kept. */
+export async function onIssueDeleted(issueId, issueKey) {
+  await deleteRecord(issueId);
+  await appendAudit(issueId, { by: 'app', via: 'engine', event: `Work item ${issueKey || issueId} deleted; Preflight evidence removed` });
 }
 
-/** Re-evaluate after a change and update the searchable mirror. */
+/** Re-evaluate after a change and update the mirrors. */
 async function refresh(issueId) {
   const state = await assess(issueId);
   try {
-    await syncProperty(state.workItem, state.result);
+    await syncIndexes(state.workItem, state.result);
   } catch (error) {
-    console.warn('Preflight property sync failed', error.message);
+    console.warn('Preflight index sync failed', error.message);
   }
   return state;
 }
+
+export { stageOf };

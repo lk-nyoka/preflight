@@ -1,146 +1,204 @@
 /**
  * Preflight issue panel (UI Kit).
  *
- * Shows, for the work item being viewed:
- *   - whether closing it is blocked, and why (matched phrases, cited clause)
- *   - each requirement, with a place to answer it
- *   - approval controls, visible only to approvers
- *   - an audit trail of who did what
+ * Built around one question a developer has when Preflight blocks them:
+ * "what do I do next, and who approves?" The top box always answers it.
  */
 import React, { useEffect, useState } from 'react';
 import ForgeReconciler, {
-  Box, Button, Heading, Inline, Lozenge, SectionMessage, Select, Spinner, Stack, Strong, Tag,
-  Text, Textfield, TextArea, User, Em, Label,
+  Box, Button, ButtonGroup, Em, Heading, Inline, Label, Lozenge, SectionMessage, Select, Spinner, Stack, Strong, Tag,
+  Text, TextArea, Textfield, User,
 } from '@forge/react';
 import { invoke } from '@forge/bridge';
 
-const STATUS = {
-  'not-applicable': { appearance: 'default', label: 'No configured rule matched' },
-  blocked: { appearance: 'removed', label: 'Blocked' },
-  clear: { appearance: 'success', label: 'Clear to close' },
-  exception: { appearance: 'moved', label: 'Exception recorded' },
+const when = (ms) => (ms ? new Date(ms).toLocaleString() : '');
+const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
+
+const STAGE_LOZENGE = {
+  'not-applicable': { appearance: 'default', text: 'No rule matched' },
+  blocked: { appearance: 'removed', text: 'Blocked' },
+  clear: { appearance: 'success', text: 'Clear' },
+  exception: { appearance: 'moved', text: 'Exception' },
 };
 
-const when = (ms) => (ms ? new Date(ms).toLocaleString() : '');
+function Approvers({ state }) {
+  if (state.approverMode === 'small-team' || !state.approvers.length) {
+    return <Text>any Jira admin <Em>(small-team mode: no named approvers yet)</Em></Text>;
+  }
+  return (
+    <Inline space="space.100" alignBlock="center" shouldWrap>
+      {state.approvers.map((id) => <User key={id} accountId={id} />)}
+    </Inline>
+  );
+}
+
+/** The single most important element: what happens next. */
+function NextStep({ state, act, busy }) {
+  const { result } = state;
+  const build = result.stages.build;
+  const done = result.stages.done;
+  if (build.needsDeclaration) {
+    return (
+      <SectionMessage appearance="warning" title="Before work starts: does this change affect personal information?">
+        <Text>Your team asks for a quick declaration on every work item. Pick one; Unsure is fine and starts a light review.</Text>
+        <ButtonGroup>
+          <Button isDisabled={busy} onClick={() => act('declare', { value: 'yes' })}>Yes</Button>
+          <Button isDisabled={busy} onClick={() => act('declare', { value: 'unsure' })}>Unsure</Button>
+          <Button isDisabled={busy} onClick={() => act('declare', { value: 'no' })}>No</Button>
+        </ButtonGroup>
+      </SectionMessage>
+    );
+  }
+  if (result.status === 'exception') {
+    return <SectionMessage appearance="discovery" title="An approver recorded a time-limited exception"><Text>Work can proceed. See the exception below.</Text></SectionMessage>;
+  }
+  if (build.status === 'blocked') {
+    const inputs = build.open.filter((o) => o.type !== 'approval');
+    if (inputs.length) {
+      return (
+        <SectionMessage appearance="warning" title={`Next: answer ${plural(inputs.length, 'question')} before work starts`}>
+          <Text>Fill them in below and click Save. Then this is approved by:</Text>
+          <Approvers state={state} />
+        </SectionMessage>
+      );
+    }
+    return (
+      <SectionMessage appearance="information" title="Next: waiting for approval">
+        <Text>Your answers are complete. Approval from:</Text>
+        <Approvers state={state} />
+        <Inline><Button isDisabled={busy} onClick={() => act('requestApproval', {})}>Request approval</Button></Inline>
+      </SectionMessage>
+    );
+  }
+  if (done.status === 'blocked') {
+    const items = done.open.map((o) => o.label);
+    return (
+      <SectionMessage appearance="information" title="Approved: work can start">
+        <Text>Before moving to Done, add: {items.join('; ')}.</Text>
+      </SectionMessage>
+    );
+  }
+  if (result.status === 'clear') {
+    return <SectionMessage appearance="success" title="Privacy review complete"><Text>All review steps for this work item are recorded. This is your organisation's review, not a legal compliance decision.</Text></SectionMessage>;
+  }
+  return null;
+}
 
 function RequirementInput({ requirement, value, onChange }) {
   if (requirement.type === 'choice') {
     const options = (requirement.options || []).map((o) => ({ label: o, value: o }));
     return (
-      <Select
-        inputId={requirement.id}
-        options={options}
-        value={options.find((o) => o.value === value) || null}
-        onChange={(option) => onChange(option ? option.value : '')}
-        placeholder="Choose one"
-      />
+      <Select inputId={requirement.id} options={options} value={options.find((o) => o.value === value) || null}
+        onChange={(option) => onChange(option ? option.value : '')} placeholder="Choose one" />
     );
   }
   if (requirement.type === 'link') {
     return <Textfield id={requirement.id} value={value} placeholder="https://…" onChange={(e) => onChange(e.target.value)} />;
   }
-  return <TextArea id={requirement.id} value={value} placeholder={requirement.help || ''} onChange={(e) => onChange(e.target.value)} />;
+  return <TextArea id={requirement.id} value={value} placeholder={requirement.help || ''} minimumRows={2} onChange={(e) => onChange(e.target.value)} />;
 }
 
-function RuleCard({ match, savedAnswers, canApprove, selfApprovalBlocked, act, busy }) {
+function RuleCard({ match, state, act, busy }) {
+  const savedAnswers = state.answers[match.ruleId] || {};
+  const drafts = state.drafts[match.ruleId] || {};
   const inputs = match.requirements.filter((r) => r.type !== 'approval');
   const approvalReq = match.requirements.find((r) => r.type === 'approval');
-  const [draft, setDraft] = useState(() =>
-    Object.fromEntries(inputs.map((r) => [r.id, savedAnswers?.[r.id]?.value || ''])),
-  );
-  const [dismissReason, setDismissReason] = useState('');
+  const [draft, setDraft] = useState(() => Object.fromEntries(inputs.map((r) => [r.id, savedAnswers[r.id]?.value || ''])));
   const [showDismiss, setShowDismiss] = useState(false);
-  const dirty = inputs.some((r) => (draft[r.id] || '') !== (savedAnswers?.[r.id]?.value || ''));
-  const inputsDone = inputs.every((r) => r.satisfied);
+  const [dismissReason, setDismissReason] = useState('');
+  const dirty = inputs.some((r) => (draft[r.id] || '') !== (savedAnswers[r.id]?.value || ''));
+  const buildInputsDone = inputs.filter((r) => r.stage === 'build').every((r) => r.satisfied);
+  const why = match.why;
+
+  const section = (stage, title) => {
+    const reqs = inputs.filter((r) => r.stage === stage);
+    if (!reqs.length) return null;
+    return (
+      <Stack space="space.100">
+        <Text><Strong>{title}</Strong></Text>
+        {reqs.map((req) => (
+          <Stack key={req.id} space="space.050">
+            <Label labelFor={req.id}>{req.label}{req.clause ? ` (${req.clause})` : ''}{req.satisfied ? ' ✓' : ''}</Label>
+            <RequirementInput requirement={req} value={draft[req.id] || ''} onChange={(v) => setDraft({ ...draft, [req.id]: v })} />
+            {drafts[req.id] && (
+              <Box padding="space.100" backgroundColor="color.background.discovery">
+                <Stack space="space.050">
+                  <Text><Strong>Rovo draft (not saved yet):</Strong> {drafts[req.id].value}</Text>
+                  <ButtonGroup>
+                    <Button appearance="discovery" onClick={() => setDraft({ ...draft, [req.id]: drafts[req.id].value })}>Use draft</Button>
+                    <Button appearance="subtle" isDisabled={busy} onClick={() => act('discardDraft', { ruleId: match.ruleId, requirementId: req.id })}>Discard</Button>
+                  </ButtonGroup>
+                </Stack>
+              </Box>
+            )}
+            {!req.satisfied && req.reason && req.reason !== 'Not answered yet' && <Text><Em>{req.reason}</Em></Text>}
+          </Stack>
+        ))}
+      </Stack>
+    );
+  };
 
   return (
     <Box padding="space.150" backgroundColor={match.satisfied ? 'color.background.success' : 'color.background.neutral'}>
-      <Stack space="space.100">
+      <Stack space="space.150">
         <Inline space="space.100" alignBlock="center" shouldWrap>
           <Heading size="small">{match.title}</Heading>
-          <Lozenge appearance={match.satisfied ? 'success' : 'removed'}>{match.satisfied ? 'Done' : 'Open'}</Lozenge>
           <Tag text={match.clause} />
+          <Lozenge appearance={match.satisfied ? 'success' : match.buildSatisfied ? 'inprogress' : 'removed'}>
+            {match.satisfied ? 'Done' : match.buildSatisfied ? 'Approved, evidence due' : 'Review needed'}
+          </Lozenge>
         </Inline>
         <Text>{match.summary}</Text>
-        {match.policyRef && <Text><Em>Internal policy: {match.policyRef}</Em></Text>}
         <Text>
-          <Strong>Why this matched: </Strong>
-          {match.why.manual ? 'flagged manually' : ''}
-          {match.why.sticky
-            ? `matched earlier ("${(match.why.firstMatched?.phrases || []).join('", "')}"). It stays open after rewording until an approver dismisses it`
-            : ''}
-          {match.why.keywords.length ? `phrases "${match.why.keywords.join('", "')}"` : ''}
-          {match.why.labels.length ? ` labels ${match.why.labels.join(', ')}` : ''}
+          <Strong>Why: </Strong>
+          {why.keywords.length ? `mentions "${why.keywords.join('", "')}"` : ''}
+          {why.labels.length ? ` label ${why.labels.join(', ')}` : ''}
+          {why.declared ? 'you declared this work affects personal information' : why.manual ? 'flagged by a teammate' : ''}
+          {why.sticky ? `matched earlier ("${(why.firstMatched?.phrases || []).join('", "')}"); it stays until an approver dismisses it` : ''}
         </Text>
-        {match.why.snippet && <Text><Em>{match.why.snippet}</Em></Text>}
+        {why.snippet && <Text><Em>{why.snippet}</Em></Text>}
 
-        {inputs.map((req) => (
-          <Stack key={req.id} space="space.050">
-            <Label labelFor={req.id}>
-              {req.label}
-              {req.clause ? ` (${req.clause})` : ''}
-              {req.satisfied ? ' ✓' : ''}
-            </Label>
-            <RequirementInput requirement={req} value={draft[req.id] || ''} onChange={(v) => setDraft({ ...draft, [req.id]: v })} />
-            {!req.satisfied && req.reason && <Text><Em>{req.reason}</Em></Text>}
-          </Stack>
-        ))}
-        {inputs.length > 0 && (
-          <Inline>
-            <Button appearance="primary" isDisabled={!dirty || busy} onClick={() => act('saveAnswers', { ruleId: match.ruleId, answers: draft })}>
-              Save answers
-            </Button>
-          </Inline>
-        )}
-
+        {section('build', 'Before work starts')}
         {approvalReq && (
           <Stack space="space.050">
             <Text><Strong>{approvalReq.label}</Strong></Text>
             {approvalReq.satisfied ? (
               <Inline space="space.100" alignBlock="center" shouldWrap>
-                <Text>Approved by</Text>
-                <User accountId={approvalReq.by} />
-                <Text>{when(approvalReq.at)}</Text>
-                {canApprove && (
-                  <Button appearance="subtle" isDisabled={busy} onClick={() => act('revokeApproval', { ruleId: match.ruleId })}>
-                    Revoke
-                  </Button>
-                )}
+                <Text>Approved by</Text><User accountId={approvalReq.by} /><Text>{when(approvalReq.at)}</Text>
+                {state.canApprove && <Button appearance="subtle" isDisabled={busy} onClick={() => act('revokeApproval', { ruleId: match.ruleId })}>Revoke</Button>}
               </Inline>
             ) : (
               <Inline space="space.100" alignBlock="center" shouldWrap>
                 <Text><Em>{approvalReq.reason}</Em></Text>
-                {canApprove && !selfApprovalBlocked && (
-                  <Button appearance="primary" isDisabled={!inputsDone || dirty || busy} onClick={() => act('approve', { ruleId: match.ruleId })}>
-                    Approve
-                  </Button>
+                {state.canApprove && !state.selfApprovalBlocked && (
+                  <Button appearance="primary" isDisabled={!buildInputsDone || dirty || busy} onClick={() => act('approve', { ruleId: match.ruleId })}>Approve</Button>
                 )}
               </Inline>
             )}
-            {canApprove && !inputsDone && <Text><Em>Approval unlocks once the answers above are saved.</Em></Text>}
+            {state.canApprove && !buildInputsDone && <Text><Em>Approve unlocks once the answers above are saved.</Em></Text>}
+            {state.canApprove && state.selfApprovalBlocked && <Text><Em>Separation of duties: you reported this work item, so another approver must approve.</Em></Text>}
           </Stack>
+        )}
+        {section('done', 'Before Done')}
+
+        {inputs.length > 0 && (
+          <Inline>
+            <Button appearance="primary" isDisabled={!dirty || busy} onClick={() => act('saveAnswers', { ruleId: match.ruleId, answers: draft })}>Save answers</Button>
+          </Inline>
         )}
 
-        {canApprove && !match.why.manual && (
+        {state.canApprove && (!showDismiss ? (
+          <Inline><Button appearance="subtle" onClick={() => setShowDismiss(true)}>This rule does not apply…</Button></Inline>
+        ) : (
           <Stack space="space.050">
-            {!showDismiss ? (
-              <Inline>
-                <Button appearance="subtle" onClick={() => setShowDismiss(true)}>Not relevant…</Button>
-              </Inline>
-            ) : (
-              <Stack space="space.050">
-                <Label labelFor={`dismiss-${match.ruleId}`}>Why this rule does not apply (kept in the audit trail)</Label>
-                <Textfield id={`dismiss-${match.ruleId}`} value={dismissReason} onChange={(e) => setDismissReason(e.target.value)} />
-                <Inline space="space.100">
-                  <Button isDisabled={!dismissReason.trim() || busy} onClick={() => act('dismissRule', { ruleId: match.ruleId, reason: dismissReason })}>
-                    Dismiss rule
-                  </Button>
-                  <Button appearance="subtle" onClick={() => setShowDismiss(false)}>Cancel</Button>
-                </Inline>
-              </Stack>
-            )}
+            <Label labelFor={`dismiss-${match.ruleId}`}>Why it does not apply (kept in the audit history)</Label>
+            <Textfield id={`dismiss-${match.ruleId}`} value={dismissReason} onChange={(e) => setDismissReason(e.target.value)} />
+            <ButtonGroup>
+              <Button isDisabled={dismissReason.trim().length < 10 || busy} onClick={() => act('dismissRule', { ruleId: match.ruleId, reason: dismissReason })}>Dismiss rule</Button>
+              <Button appearance="subtle" onClick={() => setShowDismiss(false)}>Cancel</Button>
+            </ButtonGroup>
           </Stack>
-        )}
+        ))}
       </Stack>
     </Box>
   );
@@ -154,6 +212,8 @@ const App = () => {
   const [flagChoice, setFlagChoice] = useState(null);
   const [exceptionReason, setExceptionReason] = useState('');
   const [exceptionDays, setExceptionDays] = useState('30');
+  const [showAllAudit, setShowAllAudit] = useState(false);
+  const [version, setVersion] = useState(0);
 
   const apply = (next) => {
     if (next?.ok === false) setError(next.error);
@@ -161,9 +221,9 @@ const App = () => {
       setState(next);
       setError(null);
       setNotice(next?.notice || null);
+      setVersion((v) => v + 1);
     }
   };
-
   const act = async (name, payload = {}) => {
     setBusy(true);
     try {
@@ -183,157 +243,113 @@ const App = () => {
   if (!state) return <SectionMessage appearance="error" title="Preflight could not load"><Text>{error}</Text></SectionMessage>;
 
   const { result } = state;
-  const status = STATUS[result.status];
-  const answers = state.answers || {};
+  const build = STAGE_LOZENGE[result.stages.build.status];
+  const done = STAGE_LOZENGE[result.stages.done.status];
+  const audit = showAllAudit ? state.audit : state.audit.slice(0, 5);
 
   return (
     <Stack space="space.200">
-      <Inline space="space.100" alignBlock="center" shouldWrap>
-        <Lozenge appearance={status.appearance} isBold>{status.label}</Lozenge>
-        <Text>{result.summary}</Text>
+      <Inline space="space.150" alignBlock="center" shouldWrap>
+        <Inline space="space.050" alignBlock="center"><Text>Start work</Text><Lozenge appearance={build.appearance} isBold>{build.text}</Lozenge></Inline>
+        <Inline space="space.050" alignBlock="center"><Text>Close</Text><Lozenge appearance={done.appearance} isBold>{done.text}</Lozenge></Inline>
         <Button appearance="subtle" isDisabled={busy} onClick={() => act('getState')}>Re-check</Button>
       </Inline>
-
-      <Text>
-        <Em>
-          Starter review rules, not legal advice. Your Information Officer decides which rules are active, and only a
-          named approver can sign off.
-        </Em>
-      </Text>
 
       {error && <SectionMessage appearance="error"><Text>{error}</Text></SectionMessage>}
       {notice && <SectionMessage appearance="success"><Text>{notice}</Text></SectionMessage>}
 
+      <NextStep state={state} act={act} busy={busy} />
+
       {state.hasActiveRules && !state.gate && (
-        <SectionMessage appearance="warning" title="The Preflight gate has not run in this project yet">
-          <Text>
-            Until a Jira admin adds "Preflight privacy review gate" to the transition into Done, moving work to Done is
-            not checked. See Jira settings → Apps → Preflight → Demo setup.
-          </Text>
+        <SectionMessage appearance="warning" title="The Preflight gates have not run in this project yet">
+          <Text>Until a Jira admin attaches them to this project's workflow, moving work is not checked. Jira settings → Apps → Preflight → Setup.</Text>
         </SectionMessage>
-      )}
-
-      {result.status === 'not-applicable' && state.hasActiveRules && (
-        <Text>
-          This does not mean the work has no privacy impact. If it changes how personal information is collected, used,
-          stored or shared, flag a rule below.
-        </Text>
-      )}
-
-      {state.canApprove && state.approverMode === 'small-team' && (
-        <Text>
-          <Em>Small-team mode: no named approvers are set, so Jira admins can approve. Name your Information Officer in Preflight settings.</Em>
-        </Text>
       )}
 
       {!state.hasActiveRules && (
-        <SectionMessage appearance="information" title="No rules are active yet">
-          <Text>A Jira admin can activate the POPIA starter pack under Jira settings → Apps → Preflight.</Text>
+        <SectionMessage appearance="information" title="No Preflight rules are active yet">
+          <Text>A Jira admin can review and activate the POPIA starter rules under Jira settings → Apps → Preflight.</Text>
         </SectionMessage>
       )}
 
-      {result.status === 'blocked' && (
-        <SectionMessage appearance="warning" title="This work item cannot be closed yet">
+      {result.applicable.map((match) => <RuleCard key={`${match.ruleId}-${version}`} match={match} state={state} act={act} busy={busy} />)}
+
+      {result.status === 'not-applicable' && state.hasActiveRules && !result.stages.build.needsDeclaration && (
+        <Stack space="space.050">
           <Text>
-            The privacy review steps below must be completed first. Preflight checks your organisation's own review
-            process; it does not give legal advice.
+            No configured rule matched. That does not prove the work has no privacy impact. Does it change how personal
+            information is collected, used, stored or shared?
           </Text>
-          <Inline>
-            <Button isDisabled={busy} onClick={() => act('requestApproval', {})}>Request approval</Button>
-          </Inline>
-        </SectionMessage>
+          <ButtonGroup>
+            <Button isSelected={state.declaration?.value === 'yes'} isDisabled={busy} onClick={() => act('declare', { value: 'yes' })}>Yes</Button>
+            <Button isSelected={state.declaration?.value === 'unsure'} isDisabled={busy} onClick={() => act('declare', { value: 'unsure' })}>Unsure</Button>
+            <Button isSelected={state.declaration?.value === 'no'} isDisabled={busy} onClick={() => act('declare', { value: 'no' })}>No</Button>
+          </ButtonGroup>
+        </Stack>
       )}
-
-      {state.exception && (
-        <SectionMessage appearance="discovery" title={result.exceptionExpired ? 'Exception expired' : 'Exception recorded'}>
-          <Inline space="space.100" alignBlock="center" shouldWrap>
-            <User accountId={state.exception.by} />
-            <Text>
-              {state.exception.reason} ({when(state.exception.at)}
-              {state.exception.expiresAt ? `, expires ${when(state.exception.expiresAt)}` : ''})
-            </Text>
-          </Inline>
-          {state.canApprove && (
-            <Inline><Button appearance="subtle" isDisabled={busy} onClick={() => act('clearException')}>Withdraw exception</Button></Inline>
-          )}
-        </SectionMessage>
-      )}
-
-      {result.applicable.map((match) => (
-        <RuleCard
-          key={`${match.ruleId}-${state.audit[0]?.at || 0}`}
-          match={match}
-          savedAnswers={answers[match.ruleId] || {}}
-          canApprove={state.canApprove}
-          selfApprovalBlocked={state.selfApprovalBlocked}
-          act={act}
-          busy={busy}
-        />
-      ))}
 
       {result.dismissed.length > 0 && (
         <Stack space="space.050">
           <Text><Strong>Dismissed rules</Strong></Text>
           {result.dismissed.map((d) => (
             <Inline key={d.ruleId} space="space.100" alignBlock="center" shouldWrap>
-              <Text>{d.title}: {d.dismissal.reason}</Text>
-              {state.canApprove && <Button appearance="subtle" onClick={() => act('restoreRule', { ruleId: d.ruleId })}>Restore</Button>}
+              <Text>{d.title}: {d.dismissal.reason}</Text><User accountId={d.dismissal.by} />
+              {state.canApprove && <Button appearance="subtle" isDisabled={busy} onClick={() => act('restoreRule', { ruleId: d.ruleId })}>Restore</Button>}
             </Inline>
           ))}
         </Stack>
       )}
 
+      {state.exception && (
+        <SectionMessage appearance="discovery" title={result.exceptionExpired ? 'Exception expired' : 'Exception'}>
+          <Inline space="space.100" alignBlock="center" shouldWrap>
+            <User accountId={state.exception.by} />
+            <Text>{state.exception.reason}. Granted {when(state.exception.at)}, expires {when(state.exception.expiresAt)}.</Text>
+          </Inline>
+          {state.canApprove && <Inline><Button appearance="subtle" isDisabled={busy} onClick={() => act('clearException')}>Withdraw exception</Button></Inline>}
+        </SectionMessage>
+      )}
+
       {state.flaggableRules.length > 0 && (
         <Stack space="space.050">
-          <Label labelFor="flag-rule">Preflight missed something? Flag a rule for this work item</Label>
+          <Label labelFor="flag-rule">Preflight missed something? Add a rule to this work item</Label>
           <Inline space="space.100" alignBlock="center">
-            <Select
-              inputId="flag-rule"
-              options={state.flaggableRules.map((r) => ({ label: `${r.title} (${r.clause})`, value: r.id }))}
-              value={flagChoice}
-              onChange={setFlagChoice}
-            />
-            <Button isDisabled={!flagChoice || busy} onClick={() => { act('flagRule', { ruleId: flagChoice.value }); setFlagChoice(null); }}>
-              Flag
-            </Button>
+            <Select inputId="flag-rule" options={state.flaggableRules.map((r) => ({ label: `${r.title} (${r.clause})`, value: r.id }))} value={flagChoice} onChange={setFlagChoice} />
+            <Button isDisabled={!flagChoice || busy} onClick={() => { act('flagRule', { ruleId: flagChoice.value }); setFlagChoice(null); }}>Add</Button>
           </Inline>
         </Stack>
       )}
 
       {state.canApprove && result.status === 'blocked' && (
         <Stack space="space.050">
-          <Label labelFor="exception">
-            Approver: the rules apply, but accept a time-limited deviation for this work item (reason kept in the audit trail)
-          </Label>
-          <Textfield id="exception" value={exceptionReason} placeholder="Reason" onChange={(e) => setExceptionReason(e.target.value)} />
+          <Label labelFor="exception">Approver only: the rules apply, but accept a time-limited deviation (reason is audited)</Label>
+          <Textfield id="exception" value={exceptionReason} placeholder="Reason (at least 10 characters)" onChange={(e) => setExceptionReason(e.target.value)} />
           <Inline space="space.100" alignBlock="center">
-            <Label labelFor="exception-days">Valid for (days)</Label>
+            <Label labelFor="exception-days">Days (max 90)</Label>
             <Textfield id="exception-days" type="number" width={80} value={exceptionDays} onChange={(e) => setExceptionDays(e.target.value)} />
-            <Button isDisabled={!exceptionReason.trim() || busy} onClick={() => act('setException', { reason: exceptionReason, days: Number(exceptionDays) })}>
-              Grant exception
-            </Button>
+            <Button isDisabled={exceptionReason.trim().length < 10 || busy} onClick={() => act('setException', { reason: exceptionReason, days: Number(exceptionDays) })}>Grant exception</Button>
           </Inline>
         </Stack>
       )}
 
       {state.audit.length > 0 && (
         <Stack space="space.050">
-          <Text><Strong>Audit trail</Strong></Text>
-          {state.audit.map((entry) => (
+          <Text><Strong>Audit history</Strong> <Em>(write-once)</Em></Text>
+          {audit.map((entry) => (
             <Inline key={`${entry.at}-${entry.event}`} space="space.100" alignBlock="center" shouldWrap>
               <Text>{when(entry.at)}</Text>
-              {entry.by && entry.by !== 'app' && entry.by !== 'rovo' ? <User accountId={entry.by} /> : <Text>{entry.by}</Text>}
+              {entry.by && !['app', 'unknown-user'].includes(entry.by) ? <User accountId={entry.by} /> : <Text>Preflight</Text>}
+              {entry.via === 'agent' && <Lozenge appearance="discovery">via Rovo</Lozenge>}
               <Text>{entry.event}</Text>
             </Inline>
           ))}
+          {state.audit.length > 5 && <Inline><Button appearance="subtle" onClick={() => setShowAllAudit(!showAllAudit)}>{showAllAudit ? 'Show less' : `Show all ${state.audit.length}`}</Button></Inline>}
         </Stack>
       )}
+
+      <Text><Em>Starter review rules, not legal advice. Your Information Officer decides which rules are active, and only an approver can sign off. AI can draft answers; it cannot approve.</Em></Text>
     </Stack>
   );
 };
 
-ForgeReconciler.render(
-  <React.StrictMode>
-    <App />
-  </React.StrictMode>,
-);
+ForgeReconciler.render(<React.StrictMode><App /></React.StrictMode>);

@@ -1,26 +1,54 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { evaluate, findKeywordHits, answersFingerprint } from '../src/engine/evaluate.js';
-import { POPIA_RULES, DEMO_ISSUES } from '../src/rulepacks/popia.js';
+import {
+  evaluate, findKeywordHits, answersFingerprint, redact, stem, answerQuality, checkExamples, matchTriggers,
+} from '../src/engine/evaluate.js';
+import { POPIA_RULES, DEMO_ISSUES, DECLARATION_RULE_ID } from '../src/rulepacks/popia.js';
 
 const active = POPIA_RULES.map((r) => ({ ...r, status: 'active', updatedAt: 1000 }));
 const textOf = (i) => `${i.summary}\n${i.description}`;
+const idRule = active.filter((r) => r.id === 'popia-identifiers');
+const goodAnswers = {
+  'popia-identifiers': {
+    purpose: { value: 'Verify callers against FICA records before account changes' },
+    minimality: { value: 'Date of birth is shared by many customers, so it cannot verify identity' },
+    'lawful-basis': { value: 'Required to comply with an obligation imposed by law' },
+    retention: { value: 'Deleted five years after the account is closed, as FICA requires' },
+  },
+};
 
-test('keyword matching respects word boundaries', () => {
-  assert.deepEqual(findKeywordHits('We paid the invoice', ['id number']), []);
-  assert.deepEqual(findKeywordHits('Capture SA ID-number at signup', ['id number']), ['id number']);
-  assert.deepEqual(findKeywordHits('Fix race condition in queue', ['racial', 'race or ethnic']), []);
-  assert.deepEqual(findKeywordHits('Add /health check endpoint', ['health data', 'health record']), []);
+test('stemming makes plurals match', () => {
+  assert.equal(stem('numbers'), 'number');
+  assert.equal(stem('addresses'), 'address');
+  assert.equal(stem('ids'), 'id');
+  assert.equal(stem('status'), 'status');
+  assert.deepEqual(findKeywordHits('Store customer ID numbers', ['id number']), ['id number']);
 });
 
-test('demo tickets hit the intended rules and the control ticket hits none', () => {
-  const ids = (i) => evaluate({ text: textOf(DEMO_ISSUES[i]) }, active, {}).applicable.map((m) => m.ruleId).sort();
+test('word boundaries and global excludes', () => {
+  assert.deepEqual(findKeywordHits('We paid the invoice', ['id number']), []);
+  assert.deepEqual(findKeywordHits('Fix race condition in queue', ['race']), []);
+  assert.deepEqual(findKeywordHits('Add /health check endpoint', ['health']), []);
+  assert.deepEqual(findKeywordHits('Create child issues for epic', ['child']), []);
+});
+
+test('contextual triggers need their companion words', () => {
+  const triggers = { contextual: [{ terms: ['promo'], with: ['sms', 'email'] }] };
+  assert.deepEqual(matchTriggers('Send promo SMS', triggers).keywords, ['promo']);
+  assert.deepEqual(matchTriggers('Promo banner colours', triggers).keywords, []);
+});
+
+test('every starter rule passes its own examples', () => {
+  for (const rule of POPIA_RULES) assert.deepEqual(checkExamples(rule), [], rule.id);
+});
+
+test('demo tickets hit the intended rules; the control ticket hits none', () => {
+  const ids = (i) => evaluate({ text: textOf(DEMO_ISSUES[i]) }, active, {}).applicable.map((m) => m.ruleId);
   assert.ok(ids(0).includes('popia-identifiers'));
-  assert.deepEqual(ids(1), ['popia-children', 'popia-special']);
+  assert.ok(ids(1).includes('popia-special') && ids(1).includes('popia-children'));
   assert.ok(ids(2).includes('popia-direct-marketing'));
   assert.ok(ids(3).includes('popia-cross-border'));
   assert.deepEqual(ids(4), []);
-  assert.equal(evaluate({ text: textOf(DEMO_ISSUES[4]) }, active, {}).status, 'not-applicable');
 });
 
 test('drafts are never enforced', () => {
@@ -28,90 +56,95 @@ test('drafts are never enforced', () => {
   assert.equal(evaluate({ text: textOf(DEMO_ISSUES[0]) }, drafts, {}).status, 'not-applicable');
 });
 
-test('blocked until answers and approval exist, then clear', () => {
+test('two stages: build needs answers + approval, done also needs ship-time evidence', () => {
   const work = { text: textOf(DEMO_ISSUES[0]) };
-  const rules = active.filter((r) => r.id === 'popia-identifiers');
-  assert.equal(evaluate(work, rules, {}).status, 'blocked');
-  assert.equal(evaluate(work, rules, {}).openCount, 6);
+  const empty = evaluate(work, idRule, {});
+  assert.equal(empty.stages.build.status, 'blocked');
+  assert.equal(empty.stages.build.open.length, 5); // 4 answers + approval
+  assert.equal(empty.stages.done.open.length, 6); // + privacy notice link
 
-  const answers = {
-    'popia-identifiers': {
-      purpose: { value: 'Verify callers against FICA records' },
-      minimality: { value: 'Date of birth is shared by many customers' },
-      'lawful-basis': { value: 'Required to comply with an obligation imposed by law' },
-      notification: { value: 'Signup screen links to the privacy notice section on ID numbers' },
-      retention: { value: 'Deleted 5 years after account closure' },
-    },
-  };
-  const partial = evaluate(work, rules, { answers });
-  assert.equal(partial.openCount, 1);
-  assert.match(partial.summary, /approval/);
+  const fp = answersFingerprint(goodAnswers['popia-identifiers'], idRule[0]);
+  const approved = { answers: goodAnswers, approvals: { 'popia-identifiers': { by: 'io', at: 2000, fingerprint: fp } } };
+  const r = evaluate(work, idRule, approved);
+  assert.equal(r.stages.build.status, 'clear');
+  assert.equal(r.stages.done.status, 'blocked');
+  assert.match(r.stages.done.summary, /Privacy notice/);
 
-  const fingerprint = answersFingerprint(answers['popia-identifiers']);
-  const approved = { answers, approvals: { 'popia-identifiers': { by: 'acc-1', at: 2000, fingerprint } } };
-  assert.equal(evaluate(work, rules, approved).status, 'clear');
+  const withNotice = structuredClone(approved);
+  withNotice.answers['popia-identifiers'].notification = { value: 'https://wiki.example.com/privacy-notice' };
+  const done = evaluate(work, idRule, withNotice);
+  assert.equal(done.status, 'clear');
+  // Adding the done-stage link did not make the approval stale.
+  assert.ok(done.applicable[0].requirements.find((q) => q.type === 'approval').satisfied);
 });
 
-test('approval goes stale when answers or the rule change afterwards', () => {
+test('approval goes stale when build answers or the rule change afterwards', () => {
   const work = { text: textOf(DEMO_ISSUES[0]) };
-  const rules = active.filter((r) => r.id === 'popia-identifiers');
-  const answers = {
-    'popia-identifiers': {
-      purpose: { value: 'Verify callers against FICA records' },
-      minimality: { value: 'Date of birth is shared by many customers' },
-      'lawful-basis': { value: 'Required to comply with an obligation imposed by law' },
-      notification: { value: 'Signup screen links to the privacy notice section on ID numbers' },
-      retention: { value: 'Deleted 5 years after account closure' },
-    },
-  };
-  const fingerprint = answersFingerprint(answers['popia-identifiers']);
-  const record = { answers, approvals: { 'popia-identifiers': { by: 'a', at: 2000, fingerprint } } };
+  const fp = answersFingerprint(goodAnswers['popia-identifiers'], idRule[0]);
+  const record = { answers: structuredClone(goodAnswers), approvals: { 'popia-identifiers': { by: 'a', at: 2000, fingerprint: fp } } };
+  record.answers['popia-identifiers'].retention.value = 'Kept forever for analytics purposes';
+  assert.equal(evaluate(work, idRule, record).stages.build.status, 'blocked');
 
-  const edited = structuredClone(record);
-  edited.answers['popia-identifiers'].retention.value = 'Kept forever';
-  assert.equal(evaluate(work, rules, edited).status, 'blocked');
+  const fresh = { answers: goodAnswers, approvals: { 'popia-identifiers': { by: 'a', at: 2000, fingerprint: fp } } };
+  const changed = evaluate(work, idRule.map((r) => ({ ...r, updatedAt: 3000 })), fresh);
+  assert.match(changed.stages.build.open[0].reason, /rule changed/);
+});
 
-  const ruleChanged = rules.map((r) => ({ ...r, updatedAt: 3000 }));
-  const result = evaluate(work, ruleChanged, record);
-  assert.equal(result.status, 'blocked');
-  assert.match(result.open[0].reason, /rule changed/);
+test('answer quality: filler does not count as evidence', () => {
+  assert.ok(answerQuality('aaaaaaaaaaaaaaaaaaaa'));
+  assert.ok(answerQuality('n/a'));
+  assert.ok(answerQuality('see above'));
+  assert.ok(answerQuality('test test test test'));
+  assert.equal(answerQuality('Verify callers against FICA records'), null);
+  const r = evaluate({ text: 'Add SA ID number field' }, idRule, { answers: { 'popia-identifiers': { purpose: { value: 'xxxxxxxxxxxxxx' } } } });
+  assert.match(r.open.find((o) => o.id === 'purpose').reason, /real answer/);
 });
 
 test('choice and link requirements are validated', () => {
-  const work = { text: textOf(DEMO_ISSUES[1]) };
   const rules = active.filter((r) => r.id === 'popia-special');
   const record = { answers: { 'popia-special': { basis: { value: 'Because we want to' }, safeguards: { value: 'see wiki' } } } };
-  const reasons = evaluate(work, rules, record).open.map((o) => o.reason);
+  const reasons = evaluate({ text: 'Store patients medical records' }, rules, record).open.map((o) => o.reason);
   assert.ok(reasons.includes('Pick one of the listed options'));
   assert.ok(reasons.includes('Must be a link (https://…)'));
 });
 
-test('dismissal and manual flag', () => {
-  const work = { text: textOf(DEMO_ISSUES[4]) };
-  const manual = evaluate(work, active, { manual: ['popia-bulk-export'] });
-  assert.equal(manual.status, 'blocked');
-  assert.equal(manual.applicable[0].why.manual, true);
-
-  const dm = evaluate({ text: textOf(DEMO_ISSUES[2]) }, active, {
-    dismissals: { 'popia-direct-marketing': { by: 'a', reason: 'Internal staff only' } },
-  });
-  assert.equal(dm.dismissed.length, 1);
-  assert.ok(!dm.applicable.some((m) => m.ruleId === 'popia-direct-marketing'));
+test('sticky matches survive rewording; dismissal removes them', () => {
+  const record = { matched: { 'popia-identifiers': { at: 1, phrases: ['id number'] } } };
+  const reworded = evaluate({ text: 'Capture a reference at signup' }, active, record);
+  assert.equal(reworded.applicable[0].ruleId, 'popia-identifiers');
+  assert.equal(reworded.applicable[0].why.sticky, true);
+  const dismissed = evaluate({ text: 'Capture a reference at signup' }, active, { ...record, dismissals: { 'popia-identifiers': { by: 'a', reason: 'Not an identifier at all' } } });
+  assert.equal(dismissed.status, 'not-applicable');
 });
 
-test('exception unblocks but is reported as exception, not clear', () => {
-  const result = evaluate({ text: textOf(DEMO_ISSUES[0]) }, active, { exception: { by: 'a', reason: 'Regulator-approved pilot' } });
-  assert.equal(result.status, 'exception');
+test('declaration: Unsure pulls in the general rule; required declaration blocks build only', () => {
+  const opts = { declarationRuleId: DECLARATION_RULE_ID, requireDeclaration: true };
+  const none = evaluate({ text: 'Update footer copyright year' }, active, {}, opts);
+  assert.equal(none.stages.build.status, 'blocked');
+  assert.equal(none.stages.build.needsDeclaration, true);
+  assert.equal(none.stages.done.status, 'not-applicable');
+  const no = evaluate({ text: 'Update footer copyright year' }, active, { declaration: { value: 'no' } }, opts);
+  assert.equal(no.stages.build.status, 'not-applicable');
+  const unsure = evaluate({ text: 'Update footer copyright year' }, active, { declaration: { value: 'unsure' } }, opts);
+  assert.deepEqual(unsure.applicable.map((m) => m.ruleId), [DECLARATION_RULE_ID]);
+  assert.equal(unsure.applicable[0].why.declared, true);
 });
 
-test('snippets never carry ID or phone numbers', async () => {
-  const { redact } = await import('../src/engine/evaluate.js');
-  assert.equal(redact('Customer 9001015800087 called from +27 11 555 0100'), 'Customer [number removed] called from [number removed]');
-  const r = evaluate({ text: 'Store SA ID number 9001015800087 on the profile' }, active, {});
-  assert.ok(!/9001015800087/.test(r.applicable[0].why.snippet));
+test('exceptions apply until they expire', () => {
+  const work = { text: textOf(DEMO_ISSUES[0]) };
+  assert.equal(evaluate(work, active, { exception: { by: 'a', reason: 'pilot', expiresAt: 5000 } }, { now: 4000 }).status, 'exception');
+  const expired = evaluate(work, active, { exception: { by: 'a', reason: 'pilot', expiresAt: 5000 } }, { now: 6000 });
+  assert.equal(expired.status, 'blocked');
+  assert.match(expired.summary, /expired/);
+});
+
+test('redaction removes ID numbers, phone numbers and e-mails from snippets', () => {
+  assert.equal(redact('Customer 9001015800087 on +27 11 555 0100'), 'Customer [number removed] on [number removed]');
+  assert.equal(redact('mail jane.doe@example.co.za now'), 'mail [email removed] now');
+  const r = evaluate({ text: 'Store SA ID number 9001015800087 for jane@example.com' }, active, {});
+  assert.ok(!/9001015800087|jane@/.test(r.applicable[0].why.snippet));
 });
 
 test('no match is reported as "no configured rule matched", never as compliant', () => {
-  const r = evaluate({ text: 'Update footer copyright year' }, active, {});
-  assert.match(r.summary, /No configured privacy rule matched/);
+  assert.match(evaluate({ text: 'Update footer copyright year' }, active, {}).summary, /No configured privacy rule matched/);
 });

@@ -58,6 +58,7 @@ export async function getWorkItem(issueIdOrKey, { asUser = true } = {}) {
     projectKey: issue.fields?.project?.key,
     reporterAccountId: issue.fields?.reporter?.accountId || null,
     status: issue.fields?.status?.name,
+    statusCategory: issue.fields?.status?.statusCategory?.key || null, // new | indeterminate | done
     labels: issue.fields?.labels || [],
     text: `${summary}\n${description}`,
   };
@@ -139,4 +140,82 @@ export async function createIssue(projectKey, issueTypeId, summary, description)
     }),
     `Creating "${summary}"`,
   );
+}
+
+/**
+ * Status category of a status id: 'new' (To Do), 'indeterminate' (In Progress)
+ * or 'done'. Used by the validator to decide which stage of review applies.
+ */
+export async function getStatusCategory(statusId) {
+  const data = await readJson(
+    await api.asApp().requestJira(route`/rest/api/3/status/${statusId}`, { headers: { Accept: 'application/json' } }),
+    `Reading status ${statusId}`,
+  );
+  return data?.statusCategory?.key || null;
+}
+
+/* ------------------------------------------------------------------ */
+/* Workflow coverage (admin only, best effort)                         */
+/* ------------------------------------------------------------------ */
+
+const DONE_CATEGORIES = new Set(['DONE', 'done', 'COMPLETE']);
+const PROGRESS_CATEGORIES = new Set(['IN_PROGRESS', 'INDETERMINATE', 'indeterminate', 'in_progress']);
+
+async function pages(pathFor, limit = 10) {
+  const out = [];
+  for (let page = 0; page < limit; page += 1) {
+    const response = await api.asApp().requestJira(pathFor(page * 50), { headers: { Accept: 'application/json' } });
+    const data = await readJson(response, 'Reading workflows');
+    out.push(data);
+    if (data?.isLast !== false && !data?.nextPage) break;
+  }
+  return out;
+}
+
+/**
+ * Compare every transition into a Done-category (and In-progress-category)
+ * status against the transitions that carry Preflight's validators.
+ * Uses Jira's workflow search plus the transition-rule configuration API, which
+ * lists rules created by this app. Returns rows for the admin page.
+ */
+export async function getWorkflowCoverage({ buildKey, doneKey }) {
+  const searchPages = await pages((startAt) => route`/rest/api/3/workflows/search?expand=values.transitions&maxResults=50&startAt=${startAt}`);
+  const rulePages = await pages((startAt) => route`/rest/api/3/workflow/rule/config?types=validator&expand=transition&maxResults=50&startAt=${startAt}`);
+
+  // Which (workflow, transition) pairs carry which Preflight gate.
+  const attached = new Map();
+  for (const page of rulePages) {
+    for (const wf of page?.values || []) {
+      const name = wf.workflowId?.name || wf.workflowName;
+      for (const v of wf.validators || []) {
+        const stage = String(v.key).includes(doneKey) ? 'done' : String(v.key).includes(buildKey) ? 'build' : null;
+        if (stage && v.transition?.id !== undefined) attached.set(`${name}|${v.transition.id}|${stage}`, true);
+      }
+    }
+  }
+
+  const rows = [];
+  for (const page of searchPages) {
+    const category = new Map();
+    for (const s of [...(page?.statuses || []), ...(page?.values || []).flatMap((w) => w.statuses || [])]) {
+      if (s?.statusReference) category.set(s.statusReference, s.statusCategory);
+    }
+    for (const wf of page?.values || []) {
+      const name = wf.name || wf.id?.name;
+      for (const t of wf.transitions || []) {
+        const cat = category.get(t.toStatusReference);
+        const stage = DONE_CATEGORIES.has(cat) ? 'done' : PROGRESS_CATEGORIES.has(cat) ? 'build' : null;
+        if (!stage) continue;
+        const key = stage === 'done' ? doneKey : buildKey;
+        const inline = JSON.stringify(t.validators || []).includes(key);
+        rows.push({
+          workflow: name,
+          transition: t.name || String(t.id),
+          stage,
+          protected: inline || attached.has(`${name}|${t.id}|${stage}`),
+        });
+      }
+    }
+  }
+  return rows;
 }

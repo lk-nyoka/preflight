@@ -1,80 +1,134 @@
 /**
  * Preflight admin page (UI Kit): Jira settings > Apps > Preflight.
  *
- * Tabs:
- *   Rules      review, edit, activate or deactivate rules (drafts are never enforced)
- *   Test       paste sample ticket text and see which rules would match
- *   Demo setup one click to activate the POPIA pack and create sample work items
- *   Settings   approvers, fail-closed behaviour, separation of duties
+ * Tabs: Setup (demo, gates, coverage) · Rules · Test a rule · Settings · Audit log
  */
 import React, { useEffect, useState } from 'react';
 import ForgeReconciler, {
-  Button, DynamicTable, Heading, Inline, Label, List, ListItem, Lozenge, SectionMessage, Select, Spinner, Stack,
-  Strong, Tab, TabList, TabPanel, Tabs, Tag, TagGroup, Text, TextArea, Textfield, Toggle, UserPicker, Em, Code,
+  Box, Button, ButtonGroup, Code, DynamicTable, Em, Heading, Inline, Label, List, ListItem, Lozenge, SectionMessage,
+  Select, Spinner, Stack, Strong, Tab, TabList, TabPanel, Tabs, Tag, TagGroup, Text, TextArea, Textfield, Toggle,
+  User, UserPicker,
 } from '@forge/react';
 import { invoke } from '@forge/bridge';
 
-const BLANK = {
-  id: '', title: '', clause: '', policyRef: '', summary: '', severity: 'high',
-  keywords: '', labels: '',
-  requirements: JSON.stringify(
-    [
-      { id: 'purpose', label: 'Why this data is needed', type: 'answer' },
-      { id: 'io-approval', label: 'Information Officer approval', type: 'approval' },
-    ],
-    null,
-    2,
-  ),
-};
+const TYPE_OPTIONS = [
+  { label: 'Written answer', value: 'answer' },
+  { label: 'Pick from options', value: 'choice' },
+  { label: 'Link (evidence)', value: 'link' },
+  { label: 'Approver sign-off', value: 'approval' },
+];
+const STAGE_OPTIONS = [
+  { label: 'Before work starts', value: 'build' },
+  { label: 'Before Done', value: 'done' },
+];
+const lines = (arr) => (arr || []).join('\n');
+const when = (ms) => (ms ? new Date(ms).toLocaleString() : '');
 
 function toForm(rule) {
   return {
-    id: rule.id,
-    title: rule.title,
-    clause: rule.clause || '',
-    policyRef: rule.policyRef || '',
-    summary: rule.summary || '',
-    severity: rule.severity || 'high',
-    keywords: (rule.triggers?.keywords || []).join('\n'),
-    labels: (rule.triggers?.labels || []).join(', '),
-    requirements: JSON.stringify(rule.requirements || [], null, 2),
+    id: rule?.id || '',
+    title: rule?.title || '',
+    clause: rule?.clause || '',
+    policyRef: rule?.policyRef || '',
+    summary: rule?.summary || '',
+    severity: rule?.severity || 'high',
+    keywords: lines(rule?.triggers?.keywords),
+    labels: (rule?.triggers?.labels || []).join(', '),
+    exclude: lines(rule?.triggers?.exclude),
+    contextual: (rule?.triggers?.contextual || []).map((g) => ({ terms: g.terms.join(', '), with: g.with.join(', ') })),
+    requirements: (rule?.requirements || [
+      { id: 'purpose', label: 'Why this data is needed', type: 'answer', stage: 'build' },
+      { id: 'io-approval', label: 'Information Officer approval', type: 'approval', stage: 'build' },
+    ]).map((r) => ({ ...r, options: (r.options || []).join(' | ') })),
+    examplesMatch: lines(rule?.examples?.match),
+    examplesIgnore: lines(rule?.examples?.ignore),
   };
 }
 
-function RuleEditor({ initial, originalId, onSave, onCancel, onDelete, busy }) {
-  const [form, setForm] = useState(initial);
+function fromForm(form) {
+  return {
+    ...form,
+    contextual: form.contextual.map((g) => ({ terms: g.terms, with: g.with })),
+    requirements: form.requirements.map((r) => ({ ...r, options: String(r.options || '').split('|').map((s) => s.trim()).filter(Boolean) })),
+  };
+}
+
+function RuleEditor({ rule, onSave, onCancel, onDelete, busy }) {
+  const [form, setForm] = useState(() => toForm(rule));
   const set = (key) => (e) => setForm({ ...form, [key]: e.target.value });
-  const severities = [{ label: 'High', value: 'high' }, { label: 'Medium', value: 'medium' }];
+  const setReq = (i, patch) => setForm({ ...form, requirements: form.requirements.map((r, j) => (j === i ? { ...r, ...patch } : r)) });
+  const setCtx = (i, patch) => setForm({ ...form, contextual: form.contextual.map((g, j) => (j === i ? { ...g, ...patch } : g)) });
+
   return (
-    <Stack space="space.100">
-      <Heading size="small">{originalId ? `Edit: ${initial.title}` : 'New rule'}</Heading>
-      {!originalId && (
-        <>
-          <Label labelFor="r-id">Rule id (lowercase, dashes)</Label>
-          <Textfield id="r-id" value={form.id} onChange={set('id')} />
-        </>
+    <Stack space="space.150">
+      <Heading size="small">{rule ? `Edit: ${rule.title}` : 'New rule'}</Heading>
+      {rule?.warnings?.length > 0 && (
+        <SectionMessage appearance="warning" title="Examples failing">
+          {rule.warnings.map((w) => <Text key={w}>{w}</Text>)}
+        </SectionMessage>
       )}
+      {!rule && (<><Label labelFor="r-id">Rule id (lowercase, dashes)</Label><Textfield id="r-id" value={form.id} onChange={set('id')} /></>)}
       <Label labelFor="r-title">Title</Label>
       <Textfield id="r-title" value={form.title} onChange={set('title')} />
-      <Label labelFor="r-clause">Legal or policy clause shown to users</Label>
-      <Textfield id="r-clause" value={form.clause} onChange={set('clause')} />
-      <Label labelFor="r-policy">Internal policy reference (optional)</Label>
-      <Textfield id="r-policy" value={form.policyRef} onChange={set('policyRef')} />
-      <Label labelFor="r-summary">Plain-language summary</Label>
+      <Inline space="space.200" shouldWrap>
+        <Stack space="space.050"><Label labelFor="r-clause">Clause shown to users</Label><Textfield id="r-clause" value={form.clause} onChange={set('clause')} /></Stack>
+        <Stack space="space.050"><Label labelFor="r-policy">Internal policy reference</Label><Textfield id="r-policy" value={form.policyRef} onChange={set('policyRef')} /></Stack>
+      </Inline>
+      <Label labelFor="r-summary">What the review step requires (plain language)</Label>
       <TextArea id="r-summary" value={form.summary} onChange={set('summary')} />
-      <Label labelFor="r-sev">Severity</Label>
-      <Select inputId="r-sev" options={severities} value={severities.find((s) => s.value === form.severity)} onChange={(o) => setForm({ ...form, severity: o.value })} />
-      <Label labelFor="r-kw">Trigger phrases (one per line; matched on whole words, case-insensitive)</Label>
+
+      <Text><Strong>When does this rule apply?</Strong> Phrases match whole words, ignore case and plurals.</Text>
+      <Label labelFor="r-kw">Trigger phrases (one per line)</Label>
       <TextArea id="r-kw" value={form.keywords} onChange={set('keywords')} />
+      <Text>Context triggers: a word that only counts when another word is present too (e.g. "promo" only with "sms").</Text>
+      {form.contextual.map((g, i) => (
+        <Inline key={`ctx-${i}`} space="space.100" alignBlock="end" shouldWrap>
+          <Stack space="space.050"><Label labelFor={`ctx-t-${i}`}>Words</Label><Textfield id={`ctx-t-${i}`} value={g.terms} onChange={(e) => setCtx(i, { terms: e.target.value })} /></Stack>
+          <Stack space="space.050"><Label labelFor={`ctx-w-${i}`}>Only when one of</Label><Textfield id={`ctx-w-${i}`} value={g.with} onChange={(e) => setCtx(i, { with: e.target.value })} /></Stack>
+          <Button appearance="subtle" onClick={() => setForm({ ...form, contextual: form.contextual.filter((_, j) => j !== i) })}>Remove</Button>
+        </Inline>
+      ))}
+      <Inline><Button appearance="subtle" onClick={() => setForm({ ...form, contextual: [...form.contextual, { terms: '', with: '' }] })}>Add context trigger</Button></Inline>
+      <Label labelFor="r-ex">Never match these phrases (one per line)</Label>
+      <TextArea id="r-ex" value={form.exclude} onChange={set('exclude')} />
       <Label labelFor="r-labels">Trigger labels (comma separated)</Label>
       <Textfield id="r-labels" value={form.labels} onChange={set('labels')} />
-      <Label labelFor="r-req">Requirements (JSON). Types: answer, choice (with options), link, approval</Label>
-      <TextArea id="r-req" value={form.requirements} onChange={set('requirements')} />
-      <Inline space="space.100">
-        <Button appearance="primary" isDisabled={busy} onClick={() => onSave(originalId, form)}>Save rule</Button>
-        <Button appearance="subtle" onClick={onCancel}>Cancel</Button>
-        {originalId && <Button appearance="danger" isDisabled={busy} onClick={() => onDelete(originalId)}>Delete</Button>}
+
+      <Text><Strong>What must be recorded?</Strong></Text>
+      {form.requirements.map((r, i) => (
+        <Box key={`req-${i}`} padding="space.100" backgroundColor="color.background.neutral">
+          <Stack space="space.050">
+            <Inline space="space.100" alignBlock="end" shouldWrap>
+              <Stack space="space.050"><Label labelFor={`q-l-${i}`}>Question or evidence</Label><Textfield id={`q-l-${i}`} value={r.label} onChange={(e) => setReq(i, { label: e.target.value })} /></Stack>
+              <Stack space="space.050"><Label labelFor={`q-t-${i}`}>Type</Label>
+                <Select inputId={`q-t-${i}`} options={TYPE_OPTIONS} value={TYPE_OPTIONS.find((o) => o.value === r.type)} onChange={(o) => setReq(i, { type: o.value })} /></Stack>
+              {r.type !== 'approval' && (
+                <Stack space="space.050"><Label labelFor={`q-s-${i}`}>When</Label>
+                  <Select inputId={`q-s-${i}`} options={STAGE_OPTIONS} value={STAGE_OPTIONS.find((o) => o.value === (r.stage || 'build'))} onChange={(o) => setReq(i, { stage: o.value })} /></Stack>
+              )}
+              <Stack space="space.050"><Label labelFor={`q-c-${i}`}>Clause</Label><Textfield id={`q-c-${i}`} width={100} value={r.clause || ''} onChange={(e) => setReq(i, { clause: e.target.value })} /></Stack>
+              <Button appearance="subtle" onClick={() => setForm({ ...form, requirements: form.requirements.filter((_, j) => j !== i) })}>Remove</Button>
+            </Inline>
+            {r.type === 'choice' && (
+              <><Label labelFor={`q-o-${i}`}>Options (separate with |)</Label><Textfield id={`q-o-${i}`} value={r.options || ''} onChange={(e) => setReq(i, { options: e.target.value })} /></>
+            )}
+          </Stack>
+        </Box>
+      ))}
+      <Inline><Button appearance="subtle" onClick={() => setForm({ ...form, requirements: [...form.requirements, { id: '', label: '', type: 'answer', stage: 'build' }] })}>Add requirement</Button></Inline>
+
+      <Text><Strong>Examples</Strong> (checked every time you save, so edits can't silently break matching)</Text>
+      <Inline space="space.200" shouldWrap>
+        <Stack space="space.050"><Label labelFor="r-em">Should match (one per line)</Label><TextArea id="r-em" value={form.examplesMatch} onChange={set('examplesMatch')} /></Stack>
+        <Stack space="space.050"><Label labelFor="r-ei">Should NOT match</Label><TextArea id="r-ei" value={form.examplesIgnore} onChange={set('examplesIgnore')} /></Stack>
       </Inline>
+
+      <ButtonGroup>
+        <Button appearance="primary" isDisabled={busy} onClick={() => onSave(rule?.id || null, fromForm(form))}>Save rule</Button>
+        <Button appearance="subtle" onClick={onCancel}>Cancel</Button>
+        {rule && rule.status !== 'active' && <Button appearance="danger" isDisabled={busy} onClick={() => onDelete(rule.id)}>Delete draft</Button>}
+      </ButtonGroup>
+      {rule?.status === 'active' && <Text><Em>Editing an active rule makes existing approvals for it stale. Active rules must be deactivated before they can be deleted.</Em></Text>}
     </Stack>
   );
 }
@@ -84,19 +138,20 @@ const App = () => {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
   const [notice, setNotice] = useState(null);
-  const [editing, setEditing] = useState(null); // { originalId, form }
+  const [editing, setEditing] = useState(null); // { rule } (rule null = new)
+  const [deactivating, setDeactivating] = useState(null);
+  const [reason, setReason] = useState('');
   const [sample, setSample] = useState('Add a field for the customer SA ID number and sync it to our CRM vendor in the US region.');
   const [testResult, setTestResult] = useState(null);
   const [projectKey, setProjectKey] = useState('');
+  const [coverage, setCoverage] = useState(null);
+  const [resetReason, setResetReason] = useState('');
 
   const call = async (name, payload = {}) => {
     setBusy(true);
     try {
       const next = await invoke(name, payload);
-      if (next?.ok === false) {
-        setError(next.error);
-        return null;
-      }
+      if (next?.ok === false) { setError(next.error); return null; }
       setError(null);
       if (next.rules) setState(next);
       setNotice(next.notice || null);
@@ -109,29 +164,30 @@ const App = () => {
     }
   };
 
-  useEffect(() => {
-    call('getState');
-  }, []);
+  useEffect(() => { call('getState'); }, []);
 
-  if (!state && !error) return <Spinner label="Loading Preflight settings" />;
+  if (!state && !error) return <Spinner label="Loading Preflight" />;
   if (!state) return <SectionMessage appearance="error" title="Preflight settings could not load"><Text>{error}</Text></SectionMessage>;
+
+  const approverLocked = state.settings.approverAccountIds.length > 0 && !state.settings.approverAccountIds.includes(state.me);
+  const unprotected = coverage?.coverage?.filter((r) => !r.protected) || [];
 
   const rows = state.rules.map((rule) => ({
     key: rule.id,
     cells: [
-      { key: 'title', content: <Text><Strong>{rule.title}</Strong></Text> },
-      { key: 'clause', content: <Tag text={rule.clause} /> },
-      { key: 'status', content: <Lozenge appearance={rule.status === 'active' ? 'success' : 'default'}>{rule.status}</Lozenge> },
-      { key: 'reqs', content: <Text>{(rule.requirements || []).length}</Text> },
+      { key: 't', content: <Stack space="space.025"><Text><Strong>{rule.title}</Strong></Text>{rule.source?.kind === 'rovo-draft' && <Lozenge appearance="discovery">drafted by Rovo</Lozenge>}</Stack> },
+      { key: 'c', content: <Tag text={rule.clause} /> },
+      { key: 's', content: <Stack space="space.025"><Lozenge appearance={rule.status === 'active' ? 'success' : 'default'}>{rule.status}</Lozenge>{rule.pending && <Lozenge appearance="inprogress">{`${rule.pending.kind} pending`}</Lozenge>}</Stack> },
+      { key: 'e', content: rule.warnings.length ? <Lozenge appearance="removed">{`${rule.warnings.length} example(s) fail`}</Lozenge> : <Lozenge appearance="success">examples pass</Lozenge> },
       {
-        key: 'actions',
+        key: 'a',
         content: (
-          <Inline space="space.050">
-            <Button isDisabled={busy} onClick={() => call('setRuleStatus', { id: rule.id, status: rule.status === 'active' ? 'draft' : 'active' })}>
-              {rule.status === 'active' ? 'Deactivate' : 'Activate'}
-            </Button>
-            <Button appearance="subtle" onClick={() => setEditing({ originalId: rule.id, form: toForm(rule) })}>Edit</Button>
-          </Inline>
+          <ButtonGroup>
+            {rule.status === 'active'
+              ? <Button isDisabled={busy} onClick={() => { setDeactivating(rule.id); setReason(''); }}>Deactivate…</Button>
+              : <Button appearance="primary" isDisabled={busy} onClick={() => call('setRuleStatus', { id: rule.id, status: 'active' })}>Activate</Button>}
+            <Button appearance="subtle" onClick={() => setEditing({ rule })}>Edit</Button>
+          </ButtonGroup>
         ),
       },
     ],
@@ -141,47 +197,115 @@ const App = () => {
     <Stack space="space.200">
       <Heading size="medium">Preflight</Heading>
       <Text>
-        Preflight turns your privacy policy into review steps that Jira enforces before work is closed. Rules start as
-        drafts; only active rules are enforced. The POPIA pack is an editable starter set of review rules, not a complete
-        POPIA assessment and not legal advice: have your Information Officer or privacy counsel review each rule before
-        activating it.
+        Preflight puts your privacy review in front of the work, before it is built, and makes Jira hold it until the
+        review is done. The POPIA pack is an editable starter set of review rules, not a complete POPIA assessment and not
+        legal advice: have your Information Officer or privacy counsel review each rule before activating it.
       </Text>
       {error && <SectionMessage appearance="error"><Text>{error}</Text></SectionMessage>}
       {notice && <SectionMessage appearance="success"><Text>{notice}</Text></SectionMessage>}
 
       <Tabs id="preflight-admin">
         <TabList>
+          <Tab>Setup</Tab>
           <Tab>Rules</Tab>
           <Tab>Test a rule</Tab>
-          <Tab>Demo setup</Tab>
           <Tab>Settings</Tab>
+          <Tab>Audit log</Tab>
         </TabList>
 
         <TabPanel>
+          <Stack space="space.200">
+            <Heading size="small">1. Load the demo</Heading>
+            <Text>Activates the POPIA starter rules and creates five sample work items (four that touch personal information, one that does not).</Text>
+            <Inline space="space.100" alignBlock="center">
+              <Label labelFor="project">Project key</Label>
+              <Textfield id="project" value={projectKey} placeholder="PRIV" width={120} onChange={(e) => setProjectKey(e.target.value)} />
+              <Button appearance="primary" isDisabled={!projectKey.trim() || busy} onClick={() => call('loadDemo', { projectKey })}>Load demo</Button>
+            </Inline>
+
+            <Heading size="small">2. Attach the two gates</Heading>
+            <List type="ordered">
+              <ListItem><Text>Open the project's workflow (company-managed: Project settings → Workflows; team-managed: Project settings → Work types → Edit workflow).</Text></ListItem>
+              <ListItem><Text>On the transition into <Strong>In Progress</Strong>, add the rule <Strong>Preflight: privacy review before build</Strong>.</Text></ListItem>
+              <ListItem><Text>On the transition into <Strong>Done</Strong>, add <Strong>Preflight: privacy evidence before Done</Strong>. Publish.</Text></ListItem>
+            </List>
+
+            <Heading size="small">3. Check coverage</Heading>
+            <Text>Lists every transition into an In Progress or Done status and whether the matching gate is attached.</Text>
+            <Inline><Button isDisabled={busy} onClick={async () => setCoverage(await call('checkCoverage'))}>Check workflow coverage</Button></Inline>
+            {coverage?.coverageError && <SectionMessage appearance="warning"><Text>{coverage.coverageError}</Text></SectionMessage>}
+            {coverage?.coverage && (
+              <Stack space="space.100">
+                {unprotected.length
+                  ? <SectionMessage appearance="warning" title={`${unprotected.length} transition(s) are not protected`}><Text>Work can reach these statuses without a Preflight check.</Text></SectionMessage>
+                  : <SectionMessage appearance="success" title="Every In Progress and Done transition found has its Preflight gate" />}
+                <DynamicTable
+                  head={{ cells: ['Workflow', 'Transition', 'Gate', 'Status'].map((c, i) => ({ key: `h${i}`, content: c })) }}
+                  rows={coverage.coverage.map((r, i) => ({
+                    key: `cov-${i}`,
+                    cells: [
+                      { key: 'w', content: r.workflow },
+                      { key: 't', content: r.transition },
+                      { key: 'g', content: r.stage === 'done' ? 'Evidence before Done' : 'Review before build' },
+                      { key: 's', content: <Lozenge appearance={r.protected ? 'success' : 'removed'}>{r.protected ? 'protected' : 'unprotected'}</Lozenge> },
+                    ],
+                  }))}
+                  rowsPerPage={20}
+                />
+              </Stack>
+            )}
+            <Text><Strong>Gate activity</Strong></Text>
+            {Object.keys(state.gates || {}).length === 0
+              ? <Text><Em>No gate has run yet. Attach them, then try moving a work item.</Em></Text>
+              : Object.entries(state.gates).map(([key, g]) => (
+                <Text key={key}>{key}: {Object.entries(g.stages || {}).map(([s, t]) => `${s === 'done' ? 'Done gate' : 'Build gate'} ran ${when(t)}`).join(' · ')}</Text>
+              ))}
+            <Text>Approvers see everything waiting on them under <Strong>Apps → Preflight reviews</Strong>. JQL: <Code>preflightStatus = blocked</Code>.</Text>
+          </Stack>
+        </TabPanel>
+
+        <TabPanel>
           <Stack space="space.150">
+            {state.pending.length > 0 && (
+              <SectionMessage appearance="information" title={`${state.pending.length} change(s) waiting for an approver`}>
+                {state.pending.map((p) => (
+                  <Text key={p.ruleId}>{p.title}: {p.kind}{p.change ? ` (${p.change})` : ''}, proposed {when(p.at)}</Text>
+                ))}
+                <Text><Em>Approvers decide these under Apps → Preflight reviews. The current version keeps enforcing until then.</Em></Text>
+              </SectionMessage>
+            )}
+            {deactivating && (
+              <SectionMessage appearance="warning" title="Deactivate rule">
+                <Label labelFor="deact">Reason (kept in the audit log)</Label>
+                <Textfield id="deact" value={reason} onChange={(e) => setReason(e.target.value)} />
+                <ButtonGroup>
+                  <Button appearance="warning" isDisabled={reason.trim().length < 10 || busy}
+                    onClick={async () => { if (await call('setRuleStatus', { id: deactivating, status: 'draft', reason })) setDeactivating(null); }}>Deactivate</Button>
+                  <Button appearance="subtle" onClick={() => setDeactivating(null)}>Cancel</Button>
+                </ButtonGroup>
+              </SectionMessage>
+            )}
             {editing ? (
               <RuleEditor
-                key={editing.originalId || 'new'}
-                initial={editing.form}
-                originalId={editing.originalId}
+                key={editing.rule?.id || 'new'}
+                rule={editing.rule}
                 busy={busy}
                 onCancel={() => setEditing(null)}
                 onDelete={async (id) => { if (await call('deleteRule', { id })) setEditing(null); }}
-                onSave={async (originalId, form) => {
-                  if (await call('saveRule', { originalId, rule: form })) setEditing(null);
-                }}
+                onSave={async (originalId, rule) => { if (await call('saveRule', { originalId, rule })) setEditing(null); }}
               />
             ) : (
               <>
                 <DynamicTable
-                  head={{ cells: ['Rule', 'Clause', 'Status', 'Requirements', ''].map((c, i) => ({ key: `h${i}`, content: c })) }}
+                  head={{ cells: ['Rule', 'Clause', 'Status', 'Examples', ''].map((c, i) => ({ key: `h${i}`, content: c })) }}
                   rows={rows}
-                  emptyView="No rules yet. Use Demo setup or restore the POPIA starter pack."
+                  emptyView="No rules yet. Use Setup → Load demo, or restore the POPIA starter pack."
                 />
-                <Inline space="space.100">
-                  <Button onClick={() => setEditing({ originalId: null, form: BLANK })}>New rule</Button>
+                <ButtonGroup>
+                  <Button onClick={() => setEditing({ rule: null })}>New rule</Button>
                   <Button appearance="subtle" isDisabled={busy} onClick={() => call('resetPack')}>Restore POPIA starter pack (as drafts)</Button>
-                </Inline>
+                </ButtonGroup>
+                <Text><Em>Tip: ask the Preflight agent in Rovo to "draft Preflight rules from our privacy policy page". Drafts appear here and are never enforced until you activate them.</Em></Text>
               </>
             )}
           </Stack>
@@ -191,18 +315,13 @@ const App = () => {
           <Stack space="space.100">
             <Label labelFor="sample">Paste a ticket summary and description</Label>
             <TextArea id="sample" value={sample} onChange={(e) => setSample(e.target.value)} />
-            <Inline>
-              <Button appearance="primary" isDisabled={busy} onClick={async () => setTestResult(await call('testText', { text: sample }))}>
-                Test against all rules
-              </Button>
-            </Inline>
+            <Inline><Button appearance="primary" isDisabled={busy} onClick={async () => setTestResult(await call('testText', { text: sample }))}>Test against all rules</Button></Inline>
             {testResult && testResult.matches.length === 0 && <Text>No rules match this text.</Text>}
             {testResult?.matches.map((m) => (
               <Stack key={m.ruleId} space="space.050">
                 <Inline space="space.100" alignBlock="center" shouldWrap>
-                  <Text><Strong>{m.title}</Strong></Text>
-                  <Tag text={m.clause} />
-                  <Lozenge appearance={m.enforced ? 'success' : 'default'}>{m.enforced ? 'active: would block' : 'draft: would not block'}</Lozenge>
+                  <Text><Strong>{m.title}</Strong></Text><Tag text={m.clause} />
+                  <Lozenge appearance={m.enforced ? 'success' : 'default'}>{m.enforced ? 'active: would hold the work' : 'draft: would not'}</Lozenge>
                 </Inline>
                 <TagGroup>{m.keywords.map((k) => <Tag key={k} text={k} />)}</TagGroup>
                 {m.snippet && <Text><Em>{m.snippet}</Em></Text>}
@@ -213,66 +332,61 @@ const App = () => {
         </TabPanel>
 
         <TabPanel>
-          <Stack space="space.150">
-            <Text>
-              This activates the POPIA starter pack and creates five sample work items (four that touch personal
-              information and one control item that does not) in the project you choose.
-            </Text>
-            <Label labelFor="project">Project key</Label>
-            <Inline space="space.100" alignBlock="center">
-              <Textfield id="project" value={projectKey} placeholder="PRIV" onChange={(e) => setProjectKey(e.target.value)} />
-              <Button appearance="primary" isDisabled={!projectKey.trim() || busy} onClick={() => call('loadDemo', { projectKey })}>
-                Load demo
-              </Button>
-            </Inline>
-            <SectionMessage appearance="information" title="Then attach the gate to your workflow (one time)">
-              <List type="ordered">
-                <ListItem><Text>Open the project → Project settings → Workflows (company-managed) or the board's workflow editor (team-managed).</Text></ListItem>
-                <ListItem><Text>Select the transition into Done (or "Any status → Done") → Rules / Validators → Add rule.</Text></ListItem>
-                <ListItem><Text>Choose <Strong>Preflight privacy review gate</Strong> and publish the workflow.</Text></ListItem>
-                <ListItem><Text>Repeat for every workflow whose transitions lead to Done. The status list below shows each project where the gate has run.</Text></ListItem>
-                <ListItem><Text>Try moving a sample work item to Done. It is blocked until the Preflight panel is complete.</Text></ListItem>
-              </List>
-            </SectionMessage>
-            <Text><Strong>Gate status by project</Strong> (updated when the gate runs)</Text>
-            {Object.keys(state.gates || {}).length === 0 ? (
-              <Text><Em>The gate has not run in any project yet. Attach it, then try a transition.</Em></Text>
-            ) : (
-              Object.entries(state.gates).map(([key, g]) => (
-                <Text key={key}>{key}: gate active, last ran {new Date(g.lastRunAt).toLocaleString()} on {g.lastIssueKey}</Text>
-              ))
-            )}
-            <Text>Tip: search for blocked work with JQL <Code>preflightStatus = blocked</Code>.</Text>
+          <Stack space="space.200">
+            <Stack space="space.050">
+              <Label labelFor="approvers">Approvers (your Information Officer and deputies)</Label>
+              <Text>
+                Once you name approvers, only they can approve, and only they can change this list. With none named,
+                Preflight runs in small-team mode and Jira admins approve.
+              </Text>
+              {approverLocked ? (
+                <Inline space="space.100" shouldWrap>{state.settings.approverAccountIds.map((id) => <User key={id} accountId={id} />)}</Inline>
+              ) : (
+                <UserPicker name="approvers" label="Approvers" isMulti defaultValue={state.settings.approverAccountIds}
+                  onChange={(users) => {
+                    const list = (Array.isArray(users) ? users : users ? [users] : []).map((u) => u.id).filter(Boolean);
+                    call('saveSettings', { approverAccountIds: list });
+                  }} />
+              )}
+              {approverLocked && (
+                <Stack space="space.050">
+                  <Text><Em>Only a current approver can change this list. If your approver has left, reset to small-team mode (recorded in the audit log).</Em></Text>
+                  <Inline space="space.100" alignBlock="center">
+                    <Textfield id="reset-reason" value={resetReason} placeholder="Reason" onChange={(e) => setResetReason(e.target.value)} />
+                    <Button appearance="warning" isDisabled={resetReason.trim().length < 10 || busy} onClick={() => call('resetApprovers', { reason: resetReason })}>Reset to small-team mode</Button>
+                  </Inline>
+                </Stack>
+              )}
+            </Stack>
+            {[
+              ['requireDeclaration', 'Ask for a Yes / No / Unsure declaration before work starts on items no rule matched'],
+              ['separationOfDuties', 'Separation of duties: the reporter of a work item cannot approve it'],
+              ['failClosed', 'Fail closed (recommended): if Preflight cannot evaluate, hold the transition with a clear message'],
+            ].map(([key, text]) => (
+              <Inline key={key} space="space.100" alignBlock="center">
+                <Toggle id={key} isChecked={Boolean(state.settings[key])} isDisabled={busy} onChange={() => call('saveSettings', { [key]: !state.settings[key] })} />
+                <Label labelFor={key}>{text}</Label>
+              </Inline>
+            ))}
           </Stack>
         </TabPanel>
 
         <TabPanel>
-          <Stack space="space.150">
-            <Label labelFor="approvers">
-              Approvers (Information Officer and deputies). Once you name approvers, only they can approve. With none, Jira
-              admins approve (small-team mode).
-            </Label>
-            <UserPicker
-              name="approvers"
-              label="Approvers"
-              isMulti
-              defaultValue={state.settings.approverAccountIds}
-              onChange={(users) => {
-                const list = (Array.isArray(users) ? users : users ? [users] : []).map((u) => u.id || u.accountId).filter(Boolean);
-                call('saveSettings', { approverAccountIds: list });
-              }}
+          <Stack space="space.100">
+            <Text>Rule, setting and demo changes. Events are write-once: Preflight has no way to edit or delete them.</Text>
+            <DynamicTable
+              head={{ cells: ['When', 'Who', 'What'].map((c, i) => ({ key: `h${i}`, content: c })) }}
+              rows={state.audit.map((e, i) => ({
+                key: `a-${i}`,
+                cells: [
+                  { key: 'w', content: when(e.at) },
+                  { key: 'b', content: e.by && e.by !== 'app' ? <User accountId={e.by} /> : <Text>Preflight</Text> },
+                  { key: 'e', content: <Inline space="space.050" shouldWrap>{e.via === 'agent' && <Lozenge appearance="discovery">via Rovo</Lozenge>}<Text>{e.event}</Text></Inline> },
+                ],
+              }))}
+              rowsPerPage={20}
+              emptyView="No admin events yet."
             />
-            <Inline space="space.100" alignBlock="center">
-              <Toggle id="sod" isChecked={Boolean(state.settings.separationOfDuties)} onChange={() => call('saveSettings', { separationOfDuties: !state.settings.separationOfDuties })} />
-              <Label labelFor="sod">Separation of duties: the reporter of a work item cannot approve it</Label>
-            </Inline>
-            <Inline space="space.100" alignBlock="center">
-              <Toggle id="fail" isChecked={Boolean(state.settings.failClosed)} onChange={() => call('saveSettings', { failClosed: !state.settings.failClosed })} />
-              <Label labelFor="fail">
-                Fail closed (recommended, on by default): if Preflight cannot evaluate a work item, the transition is held with
-                a clear message. Turn off to let work through and log the error instead.
-              </Label>
-            </Inline>
           </Stack>
         </TabPanel>
       </Tabs>
@@ -280,8 +394,4 @@ const App = () => {
   );
 };
 
-ForgeReconciler.render(
-  <React.StrictMode>
-    <App />
-  </React.StrictMode>,
-);
+ForgeReconciler.render(<React.StrictMode><App /></React.StrictMode>);
