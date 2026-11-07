@@ -62,7 +62,8 @@ Preflight enforces your organisation's own review process. It never says work is
 - **Deciding where AI belongs.** It would be easy to let an LLM decide whether a ticket is "POPIA compliant". That would be slow, unexplainable and legally dangerous. AI drafts and explains; deterministic rules and humans decide.
 - **Governing the governors.** A privacy control is only as strong as whoever can switch it off. I had independent reviews attack the code; they found ways for an admin to weaken a rule without the approver noticing and for a user to undo someone else's declaration. Each is now fixed and has a regression test.
 - **Getting the law right.** Each rule lists the POPIA sections it draws on, and I kept the distinctions the Act makes: an ID number is ordinary personal information (s1), not special personal information under s26. It is still a starter pack for an Information Officer to adapt, not legal advice.
-- [[Add anything that went wrong while deploying or testing on your site.]]
+- Jira refuses an app's ticket creation unless the space's permission scheme grants the hidden `atlassian-addons-project-access` role, so "Load demo" now explains exactly which permission to fix instead of failing with a bare 403.
+- On Windows, `npm install` failed because the Forge CLI (then a project dev dependency) compiles a native module that breaks on folder paths with spaces. The CLI now only lives globally.
 
 ## What I learned
 
@@ -94,7 +95,7 @@ forge, atlassian-forge, jira, jira-cloud, rovo, rovo-agents, mcp, forge-ui-kit, 
 
 ## Installation link
 
-[[From Developer Console → your app → Distribution → Start sharing (after `forge deploy -e production`).]]
+https://developer.atlassian.com/console/install/e9581f7b-84df-42b6-a25d-0cfb7c31f886?signature=AYABeM%2BMkkX%2FCaON50xGitY%2BkicAAAADAAdhd3Mta21zAEthcm46YXdzOmttczp1cy13ZXN0LTI6NzA5NTg3ODM1MjQzOmtleS83MDVlZDY3MC1mNTdjLTQxYjUtOWY5Yi1lM2YyZGNjMTQ2ZTcAuAECAQB4CxqLTo9l4lqXuFjNim1xJM%2Bp%2F3TVP9xHS2BrU5DRRucBCMZ%2BovKO5SgebI9IJqb9yAAAAH4wfAYJKoZIhvcNAQcGoG8wbQIBADBoBgkqhkiG9w0BBwEwHgYJYIZIAWUDBAEuMBEEDAm2%2F3NEvqkd3jfdbwIBEIA7Fqe2o8YBa4y%2F5ddq%2Fbd2ehoZ8IsNk%2FMYu%2Bm9n1RJYjYNM0hri1Vcex1kd9pWfpZcyfzpz8%2BIGFIP%2BXwAB2F3cy1rbXMAS2Fybjphd3M6a21zOmV1LXdlc3QtMTo3MDk1ODc4MzUyNDM6a2V5LzQ2MzBjZTZiLTAwYzMtNGRlMi04NzdiLTYyN2UyMDYwZTVjYwC4AQICAHi9bVMAkme4qVQX1fQHo6ePw3H40A7cGfz7yrmSfBWMXgHtoMIT%2Bqm1cwVEJ47KXnC2AAAAfjB8BgkqhkiG9w0BBwagbzBtAgEAMGgGCSqGSIb3DQEHATAeBglghkgBZQMEAS4wEQQMuTY1uxKJzX0GN1MNAgEQgDvwI8L2YftJO9zEoFQgo2EJ%2F2Cv9NNNqKrhHyww3yFsWdyTveBozBrrFycFkn48y%2Fu0ZDtXc81s70iYlQAHYXdzLWttcwBLYXJuOmF3czprbXM6dXMtZWFzdC0xOjcwOTU4NzgzNTI0MzprZXkvNmMxMjBiYTAtNGNkNS00OTg1LWI4MmUtNDBhMDQ5NTJjYzU3ALgBAgIAeDYASx0XCjkny4iLV6vz%2BKtEGSGT6kdt0QRpkn6D%2FlVEAdrxsdza%2FxyQmMBQ83VlHB0AAAB%2BMHwGCSqGSIb3DQEHBqBvMG0CAQAwaAYJKoZIhvcNAQcBMB4GCWCGSAFlAwQBLjARBAx9azf6cQ2rEWdjBmgCARCAO%2F3%2FlvJ8EpTZTZpPG7KiOeGNAzlWZrB8N9oBkV1IGvXwI1L%2FIGYo9kb4feOwO2MVZ0C4HquIOlGAeJwoAgAAAAAMAAAQAAAAAAAAAAAAAAAAAKnpoG31uy3yYMtYAGy6V3D%2F%2F%2F%2F%2FAAAAAQAAAAAAAAAAAAAAAQAAADK%2BVdoXbTEKw74LwjIlNODyu8uKS3PPKR9Tp7ihDMRnpUM5%2B0zHiUuXoh1KMwdgf%2Bs8YquSpsh4XaUppe%2BAQdF4Ddo%3D&product=jira
 
 ## Testing instructions
 
@@ -119,7 +120,7 @@ No external services or credentials are needed.
 
 ## App ID
 
-[[ari:cloud:ecosystem::app/... from manifest.yml after `forge register`]]
+ari:cloud:ecosystem::app/e9581f7b-84df-42b6-a25d-0cfb7c31f886
 
 ## How the project meets the main technology requirement
 
@@ -131,7 +132,7 @@ Preflight is built entirely on Atlassian Forge (Node.js runtime, UI Kit, Forge K
 
 ## Category
 
-Apps for Business Teams   [[decide: Business Teams (recommended) or Specialized Industries]]
+Apps for Business Teams
 
 ## Why this track
 
@@ -147,7 +148,7 @@ Best Agents - Rovo/Assignable agents
 
 **What worked well:** UI Kit let me build three full interfaces without a frontend build. Workflow validators are what make Preflight a gate rather than a dashboard. KVS key policies were a pleasant surprise: `FAIL_IF_EXISTS` gave me both a write-once audit log and a lock with a TTL. Rovo actions were straightforward to define, and reusing them as MCP tools through `rovo:mcp` was almost free.
 
-**What I struggled with:** Workflow rules default to company-managed projects only, and attaching a validator is still a manual step in the workflow editor, so I built a coverage check to show where the gates are missing. Several modules I rely on (workflow validators, `rovo:mcp`) are in Preview. `forge lint` needs a logged-in account, which made validating in a fresh environment harder. [[Add anything from your own deploy/install.]]
+**What I struggled with:** Workflow rules default to company-managed projects only, and attaching a validator is still a manual step in the workflow editor, so I built a coverage check to show where the gates are missing. Several modules I rely on (workflow validators, `rovo:mcp`) are in Preview. `forge lint` needs a logged-in account, which made validating in a fresh environment harder. On a real site the build gate refused the first move with the approver's name in the message, exactly as designed, and let it through once the answers were approved.
 
 **What I'd improve:** An API to attach an app's validator to a workflow programmatically (one-click onboarding), a local emulator for validators and triggers, and clearer documentation of the context a Rovo action receives (issue key, principal).
 
