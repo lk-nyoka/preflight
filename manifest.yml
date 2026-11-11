@@ -84,6 +84,9 @@ modules:
     - key: preflight-daily
       function: on-daily
       interval: day
+    - key: preflight-privacy-weekly
+      function: on-weekly-privacy
+      interval: week
 
   # ── Rovo: an assignable agent that explains gaps and gathers evidence ─────
   rovo:agent:
@@ -344,6 +347,8 @@ modules:
       handler: index.onInstalled
     - key: on-daily
       handler: index.onDaily
+    - key: on-weekly-privacy
+      handler: index.onWeeklyPrivacy
     - key: action-check-issue
       handler: index.actionCheckIssue
     - key: action-list-rules
@@ -374,6 +379,7 @@ permissions:
     - read:jira-user
     - manage:jira-configuration
     - storage:app
+    - report:personal-data
 
 app:
   runtime:

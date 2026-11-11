@@ -111,7 +111,9 @@ test('admin activates the pack via Load demo (small-team mode)', async () => {
   const out = await admin('loadDemo', { projectKey: 'PRIV' });
   assert.equal(out.ok, true, out.error);
   assert.equal(created.length, 5);
-  assert.ok((await store_.getRules()).every((r) => r.status === 'active'));
+  const rules = await store_.getRules();
+  assert.ok(rules.filter((r) => r.id.startsWith('popia-')).every((r) => r.status === 'active'));
+  assert.ok(rules.filter((r) => r.id.startsWith('gdpr-')).every((r) => r.status === 'draft'), 'the other pack stays a draft');
   assert.ok(out.rules.every((r) => r.warnings.length === 0));
 });
 

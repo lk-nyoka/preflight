@@ -9,7 +9,8 @@ import {
 import { adfToText, getDisplayName } from './jira.js';
 import { getRules, saveRules, getSettings, markGateSeen, appendAudit, listQueue, setQueueEntry } from './store.js';
 import { redact } from './engine/evaluate.js';
-import { POPIA_RULES, POPIA_PACK_ID } from './rulepacks/popia.js';
+import { PACKS } from './rulepacks/index.js';
+import { reportAndErase } from './privacy.js';
 
 /* ------------------------------------------------------------------ */
 /* Workflow validators                                                 */
@@ -136,12 +137,22 @@ export async function onIssueDeletedEvent(event) {
   if (issueId) await onIssueDeleted(issueId, event?.issue?.key).catch((e) => console.error('Preflight delete cleanup failed', e.message));
 }
 
-/** On install, load the starter pack as DRAFTS. Nothing is enforced until an admin activates it. */
+/** On install, load the starter packs as DRAFTS. Nothing is enforced until an admin activates one. */
 export async function onInstalled() {
   if ((await getRules()).length) return;
   const now = Date.now();
-  await saveRules(POPIA_RULES.map((r) => ({ ...r, status: 'draft', pack: POPIA_PACK_ID, updatedAt: now })));
-  await appendAudit('admin', { by: 'app', via: 'engine', event: 'Installed: POPIA starter pack loaded as drafts (not enforced)' });
+  await saveRules(Object.values(PACKS).flatMap((p) => p.rules.map((r) => ({ ...r, status: 'draft', pack: p.id, updatedAt: now }))));
+  await appendAudit('admin', { by: 'app', via: 'engine', event: `Installed: ${Object.values(PACKS).map((p) => p.name).join(' and ')} starter packs loaded as drafts (not enforced)` });
+}
+
+/** Weekly: report stored account IDs to Atlassian; anonymise closed accounts (see privacy.js). */
+export async function onWeeklyPrivacy() {
+  try {
+    return await reportAndErase();
+  } catch (error) {
+    console.error('Preflight personal data reporting failed', error.message || error.status);
+    return { error: true };
+  }
 }
 
 /* ------------------------------------------------------------------ */

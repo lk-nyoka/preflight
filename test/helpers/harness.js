@@ -76,7 +76,10 @@ mock.module(new URL('../../src/jira.js', import.meta.url).href, {
 
 mock.module('@forge/api', {
   defaultExport: { asUser: () => ({ requestJira: async () => ({ ok: true, json: async () => ({ issues: Object.values(issues).map((i) => ({ key: i.key })) }) }) }) },
-  namedExports: { route: (strings, ...vals) => strings.reduce((a, s, i) => a + s + (vals[i] ?? ''), '') },
+  namedExports: {
+    route: (strings, ...vals) => strings.reduce((a, s, i) => a + s + (vals[i] ?? ''), ''),
+    privacy: { reportPersonalData: async (accounts) => (globalThis.__closedAccounts || []).filter((id) => accounts.some((a) => a.accountId === id)).map((accountId) => ({ accountId, status: 'closed' })) },
+  },
 });
 
 mock.module('@forge/resolver', {

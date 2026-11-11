@@ -384,27 +384,28 @@ export async function requireApproverForBulk(actor) {
 }
 
 /**
- * Load the starter pack.
- *   status "active" (Load demo): activates pack rules. Rules someone has edited
- *     keep their edits, and pending proposals are kept.
- *   status "draft" (Restore drafts): only allowed while no pack rule is active,
- *     so a bulk action can never switch enforcement off in one click. Active rules
- *     are deactivated one by one, each with a reason in the audit log (a Jira admin
- *     who is not an approver can only propose it).
+ * Load a starter pack (POPIA, GDPR, ...). Other packs and custom rules are untouched.
+ *   status "active" (Load demo): activates the pack's rules. Rules someone has
+ *     edited keep their edits, and pending proposals are kept.
+ *   status "draft" (Restore drafts): only allowed while none of the pack's rules
+ *     is active, so a bulk action can never switch enforcement off in one click.
+ *     Active rules are deactivated one by one, each with a reason in the audit log
+ *     (a Jira admin who is not an approver can only propose it).
  * Every rule's before and after state goes to the audit log.
  */
-export const replacePack = locked(async (packRules, packPrefix, status, actor) => {
+export const replacePack = locked(async (pack, status, actor) => {
   const current = await getRules();
   const t = now();
   const byId = new Map(current.map((r) => [r.id, r]));
+  const inPack = (r) => String(r.pack || '').startsWith(pack.prefix);
   if (status === 'draft') {
-    const active = current.filter((r) => String(r.pack || '').startsWith('popia-starter') && r.status === 'active');
+    const active = current.filter((r) => inPack(r) && r.status === 'active');
     if (active.length) {
-      throw new PreflightError(`${active.length} starter rule(s) are active. Deactivate them one by one first (each needs a reason), so enforcement is never switched off in bulk.`);
+      throw new PreflightError(`${active.length} ${pack.name} rule(s) are active. Deactivate them one by one first (each needs a reason), so enforcement is never switched off in bulk.`);
     }
   }
   const changes = [];
-  const next = packRules.map((r) => {
+  const next = pack.rules.map((r) => {
     const old = byId.get(r.id);
     const edited = Boolean(old) && substantive(old) !== substantive({ ...old, ...r });
     const base = edited && status === 'active' ? old : { ...r, updatedAt: old && !edited ? old.updatedAt : t };
@@ -413,14 +414,14 @@ export const replacePack = locked(async (packRules, packPrefix, status, actor) =
     return {
       ...base,
       status,
-      pack: packPrefix,
+      pack: pack.id,
       activatedBy: status === 'active' ? (becameActive ? actor : old.activatedBy) : null,
       activatedAt: status === 'active' ? (becameActive ? t : old.activatedAt) : null,
       pending: old?.pending || null,
     };
   });
-  const custom = current.filter((r) => !String(r.pack || '').startsWith('popia-starter'));
-  await saveRules([...next, ...custom]);
-  await audit(actor, status === 'active' ? 'pack.activated' : 'pack.restored', `${status === 'active' ? 'Activated' : 'Restored as drafts'} the POPIA starter pack (${next.length} rules)`, { details: { changes } });
+  const others = current.filter((r) => !inPack(r));
+  await saveRules([...others, ...next]);
+  await audit(actor, status === 'active' ? 'pack.activated' : 'pack.restored', `${status === 'active' ? 'Activated' : 'Restored as drafts'} the ${pack.name} starter pack (${next.length} rules)`, { details: { changes } });
   return next;
 });

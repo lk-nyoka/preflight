@@ -9,6 +9,7 @@ export {
   onIssueDeletedEvent,
   onInstalled,
   onDaily,
+  onWeeklyPrivacy,
   actionCheckIssue,
   actionListRules,
   actionProposeAnswer,

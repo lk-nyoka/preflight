@@ -144,6 +144,7 @@ const App = () => {
   const [sample, setSample] = useState('Add a field for the customer SA ID number and sync it to our CRM vendor in the US region.');
   const [testResult, setTestResult] = useState(null);
   const [projectKey, setProjectKey] = useState('');
+  const [packKey, setPackKey] = useState('popia');
   const [coverage, setCoverage] = useState(null);
   const [resetReason, setResetReason] = useState('');
   const [approverDraft, setApproverDraft] = useState(null);
@@ -216,12 +217,21 @@ const App = () => {
 
         <TabPanel>
           <Stack space="space.200">
-            <Heading size="small">1. Load the demo</Heading>
-            <Text>Activates the POPIA starter rules and creates five sample work items (four that touch personal information, one that does not).</Text>
+            <SetupChecklist state={state} />
+
+            <Heading size="small">1. Choose your law and load the demo</Heading>
+            <Text>Activates that starter pack's rules and creates five sample work items in a company-managed space (four that touch personal information, one that does not).</Text>
+            <ButtonGroup>
+              {(state.packs || []).map((p) => (
+                <Button key={p.key} appearance={packKey === p.key ? 'primary' : 'default'} onClick={() => setPackKey(p.key)}>
+                  {`${p.name}${p.active ? ` · ${p.active} active` : ''}`}
+                </Button>
+              ))}
+            </ButtonGroup>
             <Inline space="space.100" alignBlock="center">
               <Label labelFor="project">Space key</Label>
               <Textfield id="project" value={projectKey} placeholder="PRIV" width={120} onChange={(e) => setProjectKey(e.target.value)} />
-              <Button appearance="primary" isDisabled={!projectKey.trim() || busy} onClick={() => call('loadDemo', { projectKey })}>Load demo</Button>
+              <Button appearance="primary" isDisabled={!projectKey.trim() || busy} onClick={() => call('loadDemo', { projectKey, pack: packKey })}>Load demo</Button>
             </Inline>
 
             <Heading size="small">2. Attach the two gates</Heading>
@@ -304,11 +314,13 @@ const App = () => {
                 <DynamicTable
                   head={{ cells: ['Rule', 'Clause', 'Status', 'Examples', ''].map((c, i) => ({ key: `h${i}`, content: c })) }}
                   rows={rows}
-                  emptyView="No rules yet. Use Setup → Load demo, or restore the POPIA starter pack."
+                  emptyView="No rules yet. Use Setup → Load demo, or restore a starter pack below."
                 />
                 <ButtonGroup>
                   <Button onClick={() => setEditing({ rule: null })}>New rule</Button>
-                  <Button appearance="subtle" isDisabled={busy} onClick={() => call('resetPack')}>Restore POPIA starter pack (as drafts; only when none is active)</Button>
+                  {(state.packs || []).map((p) => (
+                    <Button key={p.key} appearance="subtle" isDisabled={busy} onClick={() => call('resetPack', { pack: p.key })}>{`Restore ${p.name} pack as drafts`}</Button>
+                  ))}
                 </ButtonGroup>
                 <Text><Em>Tip: ask the Preflight agent in Rovo to "draft Preflight rules from our privacy policy page". Drafts appear here and are never enforced until you activate them.</Em></Text>
               </>
@@ -415,5 +427,28 @@ const App = () => {
     </Stack>
   );
 };
+
+/** Where setup stands, so an admin (or a judge) sees the next step at a glance. */
+function SetupChecklist({ state }) {
+  const active = (state.rules || []).filter((r) => r.status === 'active').length;
+  const approvers = state.settings?.approverAccountIds?.length || 0;
+  const spaces = Object.values(state.gates || {});
+  const built = spaces.some((g) => g.stages?.build);
+  const done = spaces.some((g) => g.stages?.done);
+  const steps = [
+    [active > 0, active ? `${active} rules active` : 'No rules active yet: load the demo (step 1) or activate rules'],
+    [approvers > 0, approvers ? `${approvers} approver(s) named` : 'No approver named: any Jira admin can approve until you name one (Settings tab)'],
+    [built, built ? 'Build gate has run' : 'Build gate has not run yet: attach it (step 2), then move a work item to In Progress'],
+    [done, done ? 'Done gate has run' : 'Done gate has not run yet: attach it (step 2), then move a work item to Done'],
+  ];
+  const left = steps.filter(([ok]) => !ok).length;
+  return (
+    <SectionMessage appearance={left ? 'information' : 'success'} title={left ? `Setup: ${4 - left} of 4 done` : 'Setup complete'}>
+      <Stack space="space.050">
+        {steps.map(([ok, text]) => <Text key={text}>{`${ok ? '✓' : '○'}  ${text}`}</Text>)}
+      </Stack>
+    </SectionMessage>
+  );
+}
 
 ForgeReconciler.render(<React.StrictMode><App /></React.StrictMode>);

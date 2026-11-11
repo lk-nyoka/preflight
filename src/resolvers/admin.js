@@ -13,12 +13,12 @@ import {
   withdrawProposal, applyDueReset, requireApproverForBulk, replacePack, confirmReset,
 } from '../governance.js';
 import { currentUserIsJiraAdmin, getCreatableIssueTypes, createIssue, getWorkflowCoverage } from '../jira.js';
-import { POPIA_RULES, POPIA_PACK_ID, DEMO_ISSUES } from '../rulepacks/popia.js';
+import { PACKS, packFor, isStarterRule } from '../rulepacks/index.js';
 import { PreflightError } from '../errors.js';
 import { exampleWarnings } from '../rules.js';
 
 const resolver = new Resolver();
-const isPackRule = (r) => String(r.pack || '').startsWith('popia-starter');
+const isPackRule = isStarterRule;
 
 function define(name, fn) {
   resolver.define(name, async (req) => {
@@ -46,6 +46,7 @@ async function adminState(req, extra = {}) {
     rules: rules.map((r) => ({ ...r, warnings: exampleWarnings(r) })),
     settings,
     gates,
+    packs: Object.values(PACKS).map((p) => ({ key: p.key, name: p.name, active: rules.filter((r) => String(r.pack || '').startsWith(p.prefix) && r.status === 'active').length, total: p.rules.length })),
     audit: log,
     ...extra,
   };
@@ -91,21 +92,23 @@ define('testText', async (req) => {
 
 define('resetPack', async (req) => {
   await requireApproverForBulk(req.context.accountId);
-  await replacePack(POPIA_RULES, POPIA_PACK_ID, 'draft', req.context.accountId);
-  return adminState(req, { notice: 'POPIA starter pack restored as drafts.' });
+  const pack = packFor(req.payload.pack);
+  await replacePack(pack, 'draft', req.context.accountId);
+  return adminState(req, { notice: `${pack.name} starter pack restored as drafts.` });
 });
 
-/** One click: activate the POPIA pack and create five sample work items. */
+/** One click: activate a starter pack (POPIA by default) and create its five sample work items. */
 define('loadDemo', async (req) => {
   await requireApproverForBulk(req.context.accountId);
   const projectKey = String(req.payload.projectKey || '').trim().toUpperCase();
-  if (!/^[A-Z][A-Z0-9_]{1,9}$/.test(projectKey)) throw new PreflightError('Enter a project key such as PRIV.');
+  if (!/^[A-Z][A-Z0-9_]{1,9}$/.test(projectKey)) throw new PreflightError('Enter a space key such as PRIV.');
+  const pack = packFor(req.payload.pack);
   const types = await getCreatableIssueTypes(projectKey);
   const type = types.find((t) => /task/i.test(t.name)) || types[0];
   if (!type) throw new PreflightError(`No work types can be created in ${projectKey}.`);
   // Create the work items first, so a permission problem leaves the rules untouched.
   const created = [];
-  for (const demo of DEMO_ISSUES) {
+  for (const demo of pack.demo) {
     try {
       const issue = await createIssue(projectKey, type.id, demo.summary, demo.description);
       created.push(issue.key);
@@ -119,9 +122,9 @@ define('loadDemo', async (req) => {
       throw error;
     }
   }
-  await replacePack(POPIA_RULES, POPIA_PACK_ID, 'active', req.context.accountId);
-  await audit(req, `Loaded demo in ${projectKey}: activated POPIA starter pack, created ${created.join(', ')}`);
-  return adminState(req, { notice: `Activated the POPIA starter pack and created ${created.join(', ')}.`, created });
+  await replacePack(pack, 'active', req.context.accountId);
+  await audit(req, `Loaded demo in ${projectKey}: activated the ${pack.name} starter pack, created ${created.join(', ')}`);
+  return adminState(req, { notice: `Activated the ${pack.name} starter pack and created ${created.join(', ')}.`, created });
 });
 
 /**

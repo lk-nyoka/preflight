@@ -39,9 +39,10 @@ Preflight is a Forge app for Jira that turns an organisation's privacy review in
 - **Answers have to be real.** "TBD", "not sure" and keyboard filler are rejected, and a retention answer has to say when the data goes.
 - **Governance built in.** Once approvers are named, a Jira admin can't approve, can't add themselves as approver, and an admin's changes to active rules become proposals. The approver sees every changed field, with anything that weakens the rule flagged first and the rule's examples re-run against the new version. Weakening a setting needs an approver, a break-glass reset needs a second admin and 72 hours, and bulk actions can't switch enforcement off.
 - **Bypasses are caught.** Work that reaches In Progress or Done another way (moved from another project, changed type, a workflow without the gate) is flagged to the approvers in a comment and in the inbox.
+- **It keeps the privacy rules itself.** Preflight reports the Atlassian account IDs it stores to Atlassian's personal data reporting API every week and anonymises closed accounts everywhere, even in the audit history.
 - **A write-once audit history** of every answer, approval, rule change, setting change and bypass, plus a coverage check that lists workflow transitions without a gate.
 
-It ships with an editable starter pack inspired by POPIA themes (identifying numbers, contact details and location, special personal information, children, electronic direct marketing, cross-border transfers, bulk exports). It is not a complete POPIA assessment. The engine is regulation-agnostic, so the same pattern works for GDPR or HIPAA.
+It ships with two editable starter packs, **POPIA (South Africa)** and **GDPR (EU / EEA)**, each with seven rules: identifying numbers, contact details and location, special categories, children, electronic direct marketing, cross-border transfers and bulk exports. The GDPR pack knows that hosting in Ireland is not a transfer but hosting in South Africa is. Neither is a complete legal assessment; they are starting points for an Information Officer or DPO to adapt. The engine is regulation-agnostic, so HIPAA or an internal policy is a new pack, not new code.
 
 Preflight enforces your organisation's own review process. It never says work is "compliant" and it is not legal advice.
 
@@ -53,7 +54,7 @@ Preflight enforces your organisation's own review process. It never says work is
 - **Rovo agent** (`rovo:agent` with seven `action` modules) and **`rovo:mcp`** exposing the read-only check and rule tools plus a rate-limited approval request to coding agents.
 - **Trust engineering on KVS.** Audit events are separate keys written with `FAIL_IF_EXISTS`, so history can't be rewritten through the app. Record updates run under a per-ticket lock (a `FAIL_IF_EXISTS` key with a TTL) so concurrent saves don't overwrite each other. Approvals carry a fingerprint of the answers they approved and go stale if those answers or the rule change. Evidence is deleted with its ticket.
 - **Permissions are checked server-side** in every resolver and action. The panel always takes the issue from Jira's context, never from the request.
-- **72 automated tests** cover the engine, the matcher corpus and end-to-end flows with Jira and storage faked, plus regression tests for the holes found by three independent reviews of the code (for example: an admin hiding a weakened rule from the approver, overriding someone else's "Yes" in two steps, or an approval surviving a rule change).
+- **77 automated tests** cover the engine, the matcher corpus and end-to-end flows with Jira and storage faked, plus regression tests for the holes found by three independent reviews of the code (for example: an admin hiding a weakened rule from the approver, overriding someone else's "Yes" in two steps, or an approval surviving a rule change).
 
 ## Challenges
 

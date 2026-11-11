@@ -116,11 +116,17 @@ incomplete is recorded in the audit log, announced in a comment that mentions th
 listed in the inbox under *Past a gate with the review open*.
 
 **Write-once audit.** Every answer, draft, approval, dismissal, exception, declaration, rule change, setting change,
-bypass and gate failure is its own key written with `FAIL_IF_EXISTS`; Preflight has no code path that edits or deletes
-an audit event. Answer values are not copied into audit events. Free-text reasons (dismissals, exceptions, approval
+bypass and gate failure is its own key written with `FAIL_IF_EXISTS`. Preflight never edits or deletes an audit event,
+with one exception the law requires: when Atlassian reports that an account is closed, its ID is replaced by
+`closed-account` everywhere, the audit history included (see *Personal data reporting*). Answer values are not copied into audit events. Free-text reasons (dismissals, exceptions, approval
 notes, reset reasons) are kept with e-mail addresses and digit runs removed, and the UI asks people not to include
 personal details; names or addresses typed into a reason would be kept. "Write-once" is a property of Preflight's code:
 uninstalling the app, or deploying different code, can still remove app storage.
+
+**Personal data reporting.** Preflight stores Atlassian account IDs (who answered, approved, declared or changed a
+rule; the named approvers). Once a week it reports them to Atlassian's personal data reporting API, as Atlassian's user
+privacy guidelines require, and anonymises every account Atlassian reports as closed. It stores no names, e-mails or
+avatars; those are shown live from Jira.
 
 **Concurrency.** Record updates run under a per-work-item lock (a `FAIL_IF_EXISTS` key with a 10-second TTL and its own
 deadline, so a crashed holder's lock is taken over even if storage does not expire it).
@@ -172,7 +178,7 @@ forge install --product jira --site <your-site>.atlassian.net
 Then: **Jira settings → Apps → Preflight → Setup → Load demo**, attach both gates, and drag *Add SA ID number field to
 customer signup* to In Progress.
 
-`npm test` runs 72 tests: the engine, the matcher regression corpus (including all three blind-test sets), end-to-end
+`npm test` runs 77 tests: the engine, the matcher regression corpus (including all three blind-test sets), end-to-end
 flows with Jira and storage faked (two-stage gating, stale approvals, sticky matches, drafts that don't count,
 governance of approvers and active rules, write-once audit, locks, exception expiry, rate limiting, fail-closed,
 deletion, coverage), and regression tests for the holes found by the independent audits (`test/exploits.test.js`). They do not replace testing real transitions on a developer site.
@@ -191,6 +197,8 @@ exceed them. Preflight makes no Forge LLM calls. Rovo usage is billed to the cus
 manifest.yml               modules, functions, scopes
 src/engine/evaluate.js     pure rules engine: stemming, context triggers, stages, approvals, declarations
 src/rulepacks/popia.js     POPIA-inspired starter pack (with examples) and demo work items
+src/rulepacks/gdpr.js      GDPR-inspired starter pack built on the same vocabulary
+src/privacy.js             weekly personal data reporting and closed-account anonymisation
 src/rules.js               rule validation shared by the editor and Rovo drafts
 src/governance.js          approver list, rule-change proposals with full diffs, settings, break-glass reset
 src/service.js             answers, drafts, approvals, exceptions, declarations, sticky matches, bypass detection, indexes
@@ -199,16 +207,28 @@ src/jira.js                Jira REST helpers and workflow coverage
 src/backend.js             validators, triggers, Rovo actions / MCP tools
 src/resolvers/*.js         issue panel, admin page and reviews inbox resolvers
 src/frontend/*.jsx         UI Kit panel, admin page and inbox
-test/                      node:test suites (engine, corpus, flows, exploits)
+test/                      node:test suites (engine, corpus, flows, exploits, GDPR pack)
 docs/                      judge guide, deploy guide, Devpost draft, demo script, audit prompt
 ```
 
-## POPIA themes in the starter pack
+## Starter packs: POPIA and GDPR
 
-s1 (personal information includes identifying numbers, contact details, location), s10 minimality, s11 lawful basis,
-s13 specific purpose, s14 retention, s18 notification, s19 security safeguards, s26–27 special personal information,
-s34–35 children, s69 electronic direct marketing, s72 transfers outside South Africa. These are starter review rules,
-not legal advice. Have your Information Officer or privacy counsel review and adapt them before activating.
+Preflight ships two editable starter packs with seven rules each. An admin picks one at **Setup → Load demo**, or
+activates both for a group that operates in South Africa and the EU.
+
+**POPIA (South Africa).** s1 (personal information includes identifying numbers, contact details, location),
+s10 minimality, s11 lawful basis, s13 specific purpose, s14 retention, s18 notification, s19 security safeguards,
+s26–27 special personal information, s34–35 children, s69 electronic direct marketing, s72 transfers outside South
+Africa.
+
+**GDPR (EU / EEA).** Art 5 principles, Art 6 lawful bases, Art 8 children, Art 9–10 special categories and criminal
+data, Art 13 information, Art 21 objection to marketing with ePrivacy Art 13, Art 28 processors, Art 32 security,
+Art 35 DPIA, Art 44–49 transfers, Art 87 national identifiers. It shares POPIA's detection vocabulary, plus EU
+identifiers, with one real difference: hosting inside the EEA (Ireland, Frankfurt) is not a transfer, while hosting in
+the US, India or South Africa is.
+
+These are starter review rules, not legal advice. Have your Information Officer, DPO or privacy counsel review and adapt
+them before activating.
 
 ## License
 

@@ -110,6 +110,7 @@ export const POPIA_RULES = [
   },
   {
     id: 'popia-personal-info',
+    declaration: true,
     title: 'Contact details and location',
     clause: 'POPIA s1, s10, s11, s13, s14',
     policyRef: 'Privacy Policy 4.2 – Collecting personal information',

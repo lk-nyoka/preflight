@@ -26,7 +26,8 @@ const APPROVAL_REQUEST_COOLDOWN_MS = 10 * 60 * 1000;
 
 export function evalOptions(rules, settings) {
   return {
-    declarationRuleId: rules.some((r) => r.id === DECLARATION_RULE_ID && r.status === 'active') ? DECLARATION_RULE_ID : null,
+    // The rule a Yes/Unsure declaration raises: the active pack's broadest rule (POPIA or GDPR personal information).
+    declarationRuleId: (rules.find((r) => r.status === 'active' && (r.declaration || r.id === DECLARATION_RULE_ID)) || {}).id || null,
     requireDeclaration: Boolean(settings.requireDeclaration),
   };
 }

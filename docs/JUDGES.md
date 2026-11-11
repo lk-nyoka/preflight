@@ -12,7 +12,7 @@
 
 1. Create a project if you need one (any template; a Kanban project is fine). Note its key, for example `PRIV`.
 2. **Jira settings (⚙) → Apps → Preflight → Setup → Load demo** with that key.
-   This activates the POPIA starter rules and creates five sample work items: four that touch personal information and
+   This activates the POPIA starter rules (pick **GDPR (EU / EEA)** first if you prefer) and creates five sample work items: four that touch personal information and
    one control item ("Update footer copyright year").
 
 ## 3. Attach the two gates (2 minutes, one time)

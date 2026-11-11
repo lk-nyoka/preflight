@@ -1,6 +1,6 @@
 # Preflight privacy policy
 
-_Last updated: 8 November 2026_
+_Last updated: 11 November 2026_
 
 Preflight is a Forge app for Jira, built by Lindokuhle Nyoka as an independent developer. This policy explains what
 the app stores, where, and for how long.
@@ -28,6 +28,12 @@ not copy names, e-mail addresses or avatars; it shows them live from Jira.
 People who can see a work item in Jira can see its Preflight panel. Approvers and Jira admins see the review inbox,
 filtered to work items they can see. Rovo, if your organisation uses it, can read Preflight's explanations for work
 items the signed-in user can see.
+
+## Closed Atlassian accounts
+
+Once a week Preflight reports the account IDs it stores to Atlassian's personal data reporting API. When Atlassian says
+an account has been closed, Preflight replaces that ID with "closed-account" everywhere it is stored, the audit history
+included. The record of what happened stays; who did it no longer identifies anyone.
 
 ## Your choices
 
