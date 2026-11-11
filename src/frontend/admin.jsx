@@ -174,10 +174,14 @@ const App = () => {
   const approverLocked = state.settings.approverAccountIds.length > 0 && !state.settings.approverAccountIds.includes(state.me);
   const unprotected = coverage?.coverage?.filter((r) => !r.protected) || [];
 
-  const rows = state.rules.map((rule) => ({
+  // Active rules first, then grouped by pack, so the POPIA and GDPR versions of a rule never sit side by side unlabelled.
+  const packOf = (rule) => (/^gdpr-/.test(rule.id) ? 'GDPR' : /^popia-/.test(rule.id) ? 'POPIA' : 'Custom');
+  const ordered = [...state.rules].sort((a, b) =>
+    Number(b.status === 'active') - Number(a.status === 'active') || packOf(a).localeCompare(packOf(b)));
+  const rows = ordered.map((rule) => ({
     key: rule.id,
     cells: [
-      { key: 't', content: <Stack space="space.025"><Text><Strong>{rule.title}</Strong></Text>{rule.source?.kind === 'rovo-draft' && <Lozenge appearance="discovery">drafted by Rovo</Lozenge>}</Stack> },
+      { key: 't', content: <Stack space="space.025"><Inline space="space.075" alignBlock="center"><Lozenge appearance={packOf(rule) === 'Custom' ? 'new' : 'default'}>{packOf(rule)}</Lozenge><Text><Strong>{rule.title}</Strong></Text></Inline>{rule.source?.kind === 'rovo-draft' && <Lozenge appearance="discovery">drafted by Rovo</Lozenge>}</Stack> },
       { key: 'c', content: <Tag text={rule.clause} /> },
       { key: 's', content: <Stack space="space.025"><Lozenge appearance={rule.status === 'active' ? 'success' : 'default'}>{rule.status}</Lozenge>{rule.pending && <Lozenge appearance="inprogress">{`${rule.pending.kind} pending`}</Lozenge>}</Stack> },
       { key: 'e', content: rule.warnings.length ? <Lozenge appearance="removed">{`${rule.warnings.length} example(s) fail`}</Lozenge> : <Lozenge appearance="success">examples pass</Lozenge> },
@@ -187,7 +191,7 @@ const App = () => {
           <ButtonGroup>
             {rule.status === 'active'
               ? <Button isDisabled={busy} onClick={() => { setDeactivating(rule.id); setReason(''); }}>Deactivate…</Button>
-              : <Button appearance="primary" isDisabled={busy} onClick={() => call('setRuleStatus', { id: rule.id, status: 'active' })}>Activate</Button>}
+              : <Button isDisabled={busy} onClick={() => call('setRuleStatus', { id: rule.id, status: 'active' })}>Activate</Button>}
             <Button appearance="subtle" onClick={() => setEditing({ rule })}>Edit</Button>
           </ButtonGroup>
         ),
@@ -256,7 +260,7 @@ const App = () => {
                   : <SectionMessage appearance="success" title={`All ${coverage.coverage.length} In Progress and Done transitions in ${coverage.workflows} workflow(s) have their gate`} />}
                 {coverage.otherWorkflows?.length > 0 && (
                   <SectionMessage appearance="information" title={`${coverage.otherWorkflows.length} other workflow(s) have no Preflight gate`}>
-                    <Text>{`${coverage.otherWorkflows.join(', ')}. That is fine if no space you want reviewed uses them; otherwise attach the gates there too.`}</Text>
+                    <Text>{`${coverage.otherWorkflows.slice(0, 5).join(', ')}${coverage.otherWorkflows.length > 5 ? ` and ${coverage.otherWorkflows.length - 5} more` : ''}. That is fine if no space you want reviewed uses them; otherwise attach the gates there too.`}</Text>
                   </SectionMessage>
                 )}
                 <DynamicTable
