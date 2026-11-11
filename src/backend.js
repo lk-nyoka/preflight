@@ -32,7 +32,7 @@ async function validate(issue, stage) {
       const who = view.open.some((o) => o.type === 'approval') ? await approverNames() : '';
       return {
         result: false,
-        errorMessage: `Preflight: ${view.summary}${who ? ` Approver: ${who}.` : ''} Open the Preflight panel on ${workItem.key} to see what to do next.`,
+        errorMessage: gateMessage(stage, view, who, workItem.key),
       };
     }
     return { result: true };
@@ -49,6 +49,31 @@ async function validate(issue, stage) {
         }
       : { result: true };
   }
+}
+
+/**
+ * The refusal Jira shows in a small popup: short enough to read without
+ * scrolling. Rule names and what each still needs; section numbers and full
+ * question text stay in the panel.
+ */
+export function gateMessage(stage, view, approver, key) {
+  if (!view.open?.length) return `Preflight: ${view.summary} Open the Preflight panel on ${key}.`;
+  const byRule = new Map();
+  for (const item of view.open) {
+    const r = byRule.get(item.ruleTitle) || { answers: 0, approval: false, labels: [] };
+    if (item.type === 'approval') r.approval = true;
+    else { r.answers += 1; r.labels.push(item.label); }
+    byRule.set(item.ruleTitle, r);
+  }
+  const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
+  const parts = [...byRule].map(([title, r]) => {
+    const needs = [];
+    if (r.answers) needs.push(stage === 'done' && r.answers === 1 ? r.labels[0].replace(/\s*\(.*\)$/, '') : plural(r.answers, stage === 'done' ? 'item' : 'question'));
+    if (r.approval) needs.push('approval');
+    return `${title} (${needs.join(' + ')})`;
+  });
+  const lead = stage === 'build' ? 'Privacy review needed before work starts' : 'Evidence needed before Done';
+  return `Preflight: ${lead}: ${parts.join('; ')}.${approver ? ` Approver: ${approver}.` : ''} Open the Preflight panel on ${key}.`;
 }
 
 /** Display names of the named approvers for gate messages (best effort). */
