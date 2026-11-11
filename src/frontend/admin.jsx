@@ -197,11 +197,10 @@ const App = () => {
 
   return (
     <Stack space="space.200">
-      <Heading size="medium">Preflight</Heading>
       <Text>
         Preflight puts your privacy review in front of the work, before it is built, and makes Jira hold it until the
-        review is done. The POPIA pack is an editable starter set of review rules, not a complete POPIA assessment and not
-        legal advice: have your Information Officer or privacy counsel review each rule before activating it.
+        review is done. The POPIA and GDPR packs are editable starter sets of review rules, not complete legal assessments
+        and not legal advice: have your Information Officer, DPO or privacy counsel review each rule before activating it.
       </Text>
       {error && <SectionMessage appearance="error"><Text>{error}</Text></SectionMessage>}
       {notice && <SectionMessage appearance="success"><Text>{notice}</Text></SectionMessage>}
@@ -248,8 +247,13 @@ const App = () => {
             {coverage?.coverage && (
               <Stack space="space.100">
                 {unprotected.length
-                  ? <SectionMessage appearance="warning" title={`${unprotected.length} transition(s) are not protected`}><Text>Work can reach these statuses without a Preflight check.</Text></SectionMessage>
+                  ? <SectionMessage appearance="warning" title={`${unprotected.length} transition(s) in your gated workflow(s) are not protected`}><Text>Work can reach these In Progress or Done statuses without a Preflight check. Add the matching gate, or accept the gap knowingly.</Text></SectionMessage>
                   : <SectionMessage appearance="success" title={`All ${coverage.coverage.length} In Progress and Done transitions in ${coverage.workflows} workflow(s) have their gate`} />}
+                {coverage.otherWorkflows?.length > 0 && (
+                  <SectionMessage appearance="information" title={`${coverage.otherWorkflows.length} other workflow(s) have no Preflight gate`}>
+                    <Text>{`${coverage.otherWorkflows.join(', ')}. That is fine if no space you want reviewed uses them; otherwise attach the gates there too.`}</Text>
+                  </SectionMessage>
+                )}
                 <DynamicTable
                   head={{ cells: ['Workflow', 'Transition', 'Gate', 'Status'].map((c, i) => ({ key: `h${i}`, content: c })) }}
                   rows={coverage.coverage.map((r, i) => ({

@@ -420,6 +420,17 @@ test('coverage check reports unprotected transitions', async () => {
     { workflow: 'Bug', transition: 'Resolve', stage: 'done', protected: false },
   ];
   as('admin-1');
-  const out = await admin('checkCoverage');
+  let out = await admin('checkCoverage');
+  // A workflow with no gate at all is summarised, not listed row by row.
+  assert.deepEqual(out.otherWorkflows, ['Bug']);
+  assert.equal(out.coverage.filter((r) => !r.protected).length, 0);
+  // A gap inside a gated workflow is listed, once, even when Jira repeats the transition.
+  coverageRows = [
+    { workflow: 'Software', transition: 'Start', stage: 'build', protected: true },
+    { workflow: 'Software', transition: 'Close', stage: 'done', protected: false },
+    { workflow: 'Software', transition: 'Close', stage: 'done', protected: false },
+  ];
+  out = await admin('checkCoverage');
   assert.equal(out.coverage.filter((r) => !r.protected).length, 1);
+  assert.equal(out.coverage[0].protected, false, 'gaps are listed first');
 });

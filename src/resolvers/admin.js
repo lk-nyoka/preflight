@@ -160,7 +160,20 @@ define('checkCoverage', async (req) => {
   try {
     const rows = await getWorkflowCoverage({ buildKey: 'preflight-build-gate', doneKey: 'preflight-done-gate' });
     if (!rows.length) return { ok: true, coverage: null, coverageError: `Preflight could not find any transitions into In Progress or Done statuses. Coverage is unknown, so check each workflow by hand. (Details for support: ${rows.diagnostic || 'none'})` };
-    return { ok: true, coverage: rows, workflows: new Set(rows.map((r) => r.workflow)).size };
+    // One row per workflow, transition and gate (Jira repeats a transition name for each "from" status).
+    const merged = new Map();
+    for (const r of rows) {
+      const key = `${r.workflow}|${r.transition}|${r.stage}`;
+      merged.set(key, { ...r, protected: Boolean(merged.get(key)?.protected || r.protected) });
+    }
+    const all = [...merged.values()];
+    // Workflows with at least one gate are the ones the team chose to review; list their gaps in detail.
+    // Workflows with no gate at all (often unused defaults) are summarised so they don't bury the real gaps.
+    const guarded = new Set(all.filter((r) => r.protected).map((r) => r.workflow));
+    const detail = guarded.size ? all.filter((r) => guarded.has(r.workflow)) : all;
+    const others = guarded.size ? [...new Set(all.filter((r) => !guarded.has(r.workflow)).map((r) => r.workflow))].sort() : [];
+    detail.sort((a, b) => Number(a.protected) - Number(b.protected) || a.workflow.localeCompare(b.workflow));
+    return { ok: true, coverage: detail, workflows: new Set(detail.map((r) => r.workflow)).size, otherWorkflows: others };
   } catch (error) {
     return { ok: true, coverage: null, coverageError: `Could not read workflows: ${error.message}` };
   }
