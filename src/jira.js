@@ -206,20 +206,41 @@ export async function getWorkflowCoverage({ buildKey, doneKey }) {
     }
   }
 
-  const rows = [];
+  // Status category for each status reference. Only entries that carry a category count: a workflow's own
+  // status list has none, and letting it overwrite the top-level list blanked every category (seen live).
+  const category = new Map();
+  const names = new Map();
   for (const page of searchPages) {
-    const category = new Map();
     for (const s of [...(page?.statuses || []), ...(page?.values || []).flatMap((w) => w.statuses || [])]) {
-      if (s?.statusReference) category.set(s.statusReference, s.statusCategory);
+      const ref = s?.statusReference || s?.id;
+      if (!ref) continue;
+      const cat = s.statusCategory?.key || s.statusCategory;
+      if (cat && !category.has(ref)) category.set(ref, String(cat));
+      if (s.name && !names.has(ref)) names.set(ref, s.name);
     }
+  }
+  const stageOf = (ref) => {
+    const cat = category.get(ref);
+    if (cat) return DONE_CATEGORIES.has(cat) ? 'done' : PROGRESS_CATEGORIES.has(cat) ? 'build' : null;
+    // Last resort when no category came back: the status name.
+    const name = String(names.get(ref) || '').toLowerCase();
+    return /^(done|closed|resolved|complete)/.test(name) ? 'done' : /in progress|in development|doing/.test(name) ? 'build' : null;
+  };
+
+  const rows = [];
+  let workflows = 0;
+  let transitions = 0;
+  for (const page of searchPages) {
     for (const wf of page?.values || []) {
+      workflows += 1;
       const name = wf.name || wf.id?.name;
       for (const t of wf.transitions || []) {
-        const cat = category.get(t.toStatusReference);
-        const stage = DONE_CATEGORIES.has(cat) ? 'done' : PROGRESS_CATEGORIES.has(cat) ? 'build' : null;
+        transitions += 1;
+        const to = t.toStatusReference || t.to?.statusReference || t.to?.id || t.to;
+        const stage = stageOf(to);
         if (!stage) continue;
         const key = stage === 'done' ? doneKey : buildKey;
-        const inline = JSON.stringify(t.validators || []).includes(key);
+        const inline = JSON.stringify([t.validators, t.rules, t.conditions]).includes(key);
         rows.push({
           workflow: name,
           transition: t.name || String(t.id),
@@ -228,6 +249,13 @@ export async function getWorkflowCoverage({ buildKey, doneKey }) {
         });
       }
     }
+  }
+  // Nothing recognised: describe what Jira sent (field names and counts only, no data) so it can be fixed.
+  if (!rows.length) {
+    const firstWf = searchPages[0]?.values?.[0] || {};
+    rows.diagnostic = `Jira returned ${workflows} workflow(s), ${transitions} transition(s), ${category.size} status categories. ` +
+      `Workflow fields: ${Object.keys(firstWf).join(', ') || 'none'}. Transition fields: ${Object.keys(firstWf.transitions?.[0] || {}).join(', ') || 'none'}. ` +
+      `Top-level fields: ${Object.keys(searchPages[0] || {}).join(', ') || 'none'}.`;
   }
   return rows;
 }

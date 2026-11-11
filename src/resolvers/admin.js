@@ -159,7 +159,7 @@ define('withdrawProposal', async (req) => {
 define('checkCoverage', async (req) => {
   try {
     const rows = await getWorkflowCoverage({ buildKey: 'preflight-build-gate', doneKey: 'preflight-done-gate' });
-    if (!rows.length) return { ok: true, coverage: null, coverageError: 'Preflight could not find any transitions into In Progress or Done statuses. Coverage is unknown, so check each workflow by hand.' };
+    if (!rows.length) return { ok: true, coverage: null, coverageError: `Preflight could not find any transitions into In Progress or Done statuses. Coverage is unknown, so check each workflow by hand. (Details for support: ${rows.diagnostic || 'none'})` };
     return { ok: true, coverage: rows, workflows: new Set(rows.map((r) => r.workflow)).size };
   } catch (error) {
     return { ok: true, coverage: null, coverageError: `Could not read workflows: ${error.message}` };

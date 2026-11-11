@@ -60,3 +60,20 @@ test('coverage finds unprotected Done transitions and recognises both detection 
   assert.equal(byKey['Bug workflow|Resolve'].protected, false);
   assert.equal(byKey['Bug workflow|Resolve'].stage, 'done');
 });
+
+test('coverage: a workflow\'s own status list (no categories) does not blank the top-level categories', async () => {
+  searchFixture.values[0].statuses = [{ statusReference: 's-prog' }, { statusReference: 's-done' }];
+  const rows = await getWorkflowCoverage({ buildKey: 'preflight-build-gate', doneKey: 'preflight-done-gate' });
+  assert.equal(rows.length, 3, 'categories survive the per-workflow status list');
+  delete searchFixture.values[0].statuses;
+});
+
+test('coverage: global "Any status" transitions and name fallback', async () => {
+  const saved = searchFixture.statuses;
+  searchFixture.statuses = [{ statusReference: 's-prog', name: 'In Progress' }, { statusReference: 's-done', name: 'Done' }];
+  searchFixture.values[0].transitions.push({ id: '51', name: 'Done', type: 'GLOBAL', toStatusReference: 's-done', links: [], validators: [] });
+  const rows = await getWorkflowCoverage({ buildKey: 'preflight-build-gate', doneKey: 'preflight-done-gate' });
+  assert.ok(rows.some((r) => r.transition === 'Done' && r.stage === 'done'), 'global transition into Done is listed');
+  searchFixture.statuses = saved;
+  searchFixture.values[0].transitions.pop();
+});
