@@ -15,6 +15,7 @@ import {
 import { currentUserIsJiraAdmin, getCreatableIssueTypes, createIssue, getWorkflowCoverage } from '../jira.js';
 import { PACKS, packFor, isStarterRule } from '../rulepacks/index.js';
 import { PreflightError } from '../errors.js';
+import { assess, syncIndexes } from '../service.js';
 import { exampleWarnings } from '../rules.js';
 
 const resolver = new Resolver();
@@ -123,6 +124,15 @@ define('loadDemo', async (req) => {
     }
   }
   await replacePack(pack, 'active', req.context.accountId);
+  // Jira's "created" events fired before the rules were active, so check the new items now to fill the inbox.
+  for (const key of created) {
+    try {
+      const state = await assess(key, { asUser: false });
+      await syncIndexes(state.workItem, state.result, state.record);
+    } catch (error) {
+      console.warn('Preflight demo re-check failed', key, error.message);
+    }
+  }
   await audit(req, `Loaded demo in ${projectKey}: activated the ${pack.name} starter pack, created ${created.join(', ')}`);
   return adminState(req, { notice: `Activated the ${pack.name} starter pack and created ${created.join(', ')}.`, created });
 });
@@ -170,6 +180,10 @@ define('checkCoverage', async (req) => {
     // Workflows with at least one gate are the ones the team chose to review; list their gaps in detail.
     // Workflows with no gate at all (often unused defaults) are summarised so they don't bury the real gaps.
     const guarded = new Set(all.filter((r) => r.protected).map((r) => r.workflow));
+    // No gate anywhere: say so plainly instead of listing every transition on the site.
+    if (!guarded.size) {
+      return { ok: true, coverage: null, noGates: true, otherWorkflows: [...new Set(all.map((r) => r.workflow))].sort(), diagnostic: rows.diagnostic || null };
+    }
     const detail = guarded.size ? all.filter((r) => guarded.has(r.workflow)) : all;
     const others = guarded.size ? [...new Set(all.filter((r) => !guarded.has(r.workflow)).map((r) => r.workflow))].sort() : [];
     detail.sort((a, b) => Number(a.protected) - Number(b.protected) || a.workflow.localeCompare(b.workflow));

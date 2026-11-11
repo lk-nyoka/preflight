@@ -173,7 +173,7 @@ export async function getStatusCategory(statusId) {
 const DONE_CATEGORIES = new Set(['DONE', 'done', 'COMPLETE']);
 const PROGRESS_CATEGORIES = new Set(['IN_PROGRESS', 'INDETERMINATE', 'indeterminate', 'in_progress']);
 
-async function pages(pathFor, limit = 10) {
+async function pages(pathFor, limit = 20) {
   const out = [];
   for (let page = 0; page < limit; page += 1) {
     const response = await api.asApp().requestJira(pathFor(page * 50), { headers: { Accept: 'application/json' } });

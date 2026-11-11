@@ -244,6 +244,11 @@ const App = () => {
             <Text>Lists every transition into an In Progress or Done status and whether the matching gate is attached.</Text>
             <Inline><Button isDisabled={busy} onClick={async () => setCoverage(await call('checkCoverage'))}>Check workflow coverage</Button></Inline>
             {coverage?.coverageError && <SectionMessage appearance="warning"><Text>{coverage.coverageError}</Text></SectionMessage>}
+            {coverage?.noGates && (
+              <SectionMessage appearance="warning" title="No Preflight gate is attached to any workflow yet">
+                <Text>{`Preflight checked ${coverage.otherWorkflows.length} workflow(s) and found neither gate. Add "Preflight: privacy review before build" to the transition into In Progress and "Preflight: privacy evidence before Done" to the transition into Done, click Update workflow, then check again.`}</Text>
+              </SectionMessage>
+            )}
             {coverage?.coverage && (
               <Stack space="space.100">
                 {unprotected.length

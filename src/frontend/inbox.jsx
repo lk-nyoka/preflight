@@ -118,7 +118,7 @@ const App = () => {
         </SectionMessage>
       )}
       {!data.awaitingApproval.length && !data.waitingOnTeam.length ? (
-        <EmptyState header={data.exceptions?.length || data.bypassed?.length ? 'Nothing else waiting' : 'Nothing waiting'} description="No other work item has an open privacy review." />
+        <EmptyState header={data.exceptions?.length || data.bypassed?.length ? 'Nothing else waiting' : 'Nothing waiting'} description="No work item has an open privacy review right now." />
       ) : (
         <>
           <Heading size="medium">{`Waiting for approval (${data.awaitingApproval.length})`}</Heading>
