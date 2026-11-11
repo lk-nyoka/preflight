@@ -182,20 +182,27 @@ function findApplicable(result, ruleId) {
 
 /** Save answers a PERSON typed or confirmed in the panel. The only way a requirement becomes satisfied. */
 export async function saveAnswers(issueIdOrKey, ruleId, answers, actor) {
-  const { workItem, rules, result } = await assess(issueIdOrKey);
+  const { workItem, rules, result, record } = await assess(issueIdOrKey);
   findApplicable(result, ruleId);
   const rule = rules.find((r) => r.id === ruleId);
   const allowed = new Map(rule.requirements.filter((r) => r.type !== 'approval').map((r) => [r.id, r]));
   const clean = {};
+  const answered = [];
+  const cleared = [];
   for (const [reqId, value] of Object.entries(answers || {})) {
     if (!allowed.has(reqId)) throw new PreflightError(`Unknown requirement "${reqId}" for ${rule.title}.`);
-    clean[reqId] = { value: String(value ?? '').slice(0, 2000), by: actor, at: Date.now() };
+    const text = String(value ?? '').slice(0, 2000);
+    const before = String(record?.answers?.[ruleId]?.[reqId]?.value ?? '');
+    // Only real changes are saved and logged: an empty box that was already empty is not an answer.
+    if (text.trim() === before.trim()) continue;
+    clean[reqId] = { value: text, by: actor, at: Date.now() };
+    (text.trim() ? answered : cleared).push(allowed.get(reqId).label);
   }
-  if (!Object.keys(clean).length) throw new PreflightError('Nothing to save.');
+  if (!Object.keys(clean).length) throw new PreflightError('Nothing has changed since the last save.');
   await updateRecord(
     workItem.id,
     actor,
-    `Answered ${[...Object.keys(clean)].map((id) => allowed.get(id).label).join(', ')} for "${rule.title}"`,
+    [answered.length && `Answered ${answered.join(', ')}`, cleared.length && `Cleared ${cleared.join(', ')}`].filter(Boolean).join('; ') + ` for "${rule.title}"`,
     (rec) => {
       rec.answers[ruleId] = { ...(rec.answers[ruleId] || {}), ...clean };
       for (const reqId of Object.keys(clean)) if (rec.drafts?.[ruleId]) delete rec.drafts[ruleId][reqId];

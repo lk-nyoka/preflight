@@ -295,8 +295,8 @@ const App = () => {
       )}
 
       {state.hasActiveRules && !state.gate && (
-        <SectionMessage appearance="warning" title="The Preflight gates have not run in this space yet">
-          <Text>Until a Jira admin attaches them to this space's workflow, moving work is not checked. Jira settings → Apps → Preflight → Setup.</Text>
+        <SectionMessage appearance="information" title="No Preflight gate has run in this space yet">
+          <Text>The gates report here the first time someone moves a work item. If moving work is not being held, a Jira admin needs to attach them: Jira settings → Apps → Preflight → Setup.</Text>
         </SectionMessage>
       )}
 
