@@ -9,6 +9,11 @@ recordings/blocked.mp4) and that scene uses your footage, framed Apple-style on
 the soft background, instead of the animated recreation. Audio for the scene
 (narration, music, SFX) stays the same, so record to the scene's length.
 
+AI story shots: put a clip at story/<scene-id>.mp4 (for example story/cold.mp4)
+and it fills the whole frame for that scene, slightly darkened, looping if it is
+shorter than the scene. Use these only for the dark story scenes; every app
+scene must be a real recording, because the rules require showing the app.
+
 Everything here is original: the music and sound effects are synthesized from
 scratch, the voice is Piper (neural TTS, voice "lessac").
 """
@@ -266,19 +271,43 @@ def srt(tl):
     (BUILD / 'preflight-demo.srt').write_text('\n'.join(lines))
 
 # ---------------------------------------------------------------- video
+def probe_seconds(path):
+    out = subprocess.run(['ffprobe', '-v', 'error', '-show_entries', 'format=duration', '-of', 'csv=p=0', str(path)],
+                         capture_output=True, text=True, check=True).stdout.strip()
+    return float(out or 0)
+
 def video(tl, total, mix):
     frames = BUILD / 'frames'
     rec = HERE / 'recordings'
+    story = HERE / 'story'
     overlays = [s for s in tl if (rec / f"{s['id']}.mp4").exists()]
+    stories = [s for s in tl if (story / f"{s['id']}.mp4").exists()]
     out = BUILD / 'preflight-demo.mp4'
     base = ['ffmpeg', '-y', '-framerate', str(FPS), '-i', str(frames / 'f%05d.jpg')]
     inputs, filters, last = [], [], '[0:v]'
-    for k, s in enumerate(overlays, start=2):
-        inputs += ['-i', str(rec / f"{s['id']}.mp4")]
-        # Apple-style frame: scale into a rounded window on the soft background, gently zooming
-        filters.append(f"[{k}:v]scale=1600:-2,setpts=PTS-STARTPTS+{s['start']}/TB,format=rgba[r{k}]")
+    k = 2
+    for s in stories:
+        # Full-bleed, cover-cropped, a touch darker, looped to the scene's length, faded in and out.
+        inputs += ['-stream_loop', '-1', '-i', str(story / f"{s['id']}.mp4")]
+        d = s['dur']
+        filters.append(
+            f"[{k}:v]scale=1920:1080:force_original_aspect_ratio=increase,crop=1920:1080,fps={FPS},"
+            f"eq=brightness=-0.06:saturation=0.85,trim=duration={d:.3f},format=rgba,"
+            f"fade=t=in:st=0:d=0.4:alpha=1,fade=t=out:st={max(d - 0.4, 0):.3f}:d=0.4:alpha=1,"
+            f"setpts=PTS-STARTPTS+{s['start']}/TB[s{k}]")
+        filters.append(f"{last}[s{k}]overlay=0:0:eof_action=pass:enable='between(t,{s['start']},{s['start'] + d})'[v{k}]")
+        last = f'[v{k}]'
+        k += 1
+    for s in overlays:
+        clip = rec / f"{s['id']}.mp4"
+        inputs += ['-i', str(clip)]
+        # A take longer than its scene is sped up to fit (at most 3x), so nothing is cut off.
+        speed = max(1.0, min(3.0, probe_seconds(clip) / s['dur']))
+        # Apple-style frame: scale into a rounded window on the soft background
+        filters.append(f"[{k}:v]scale=1600:-2,fps={FPS},setpts=(PTS-STARTPTS)/{speed:.4f}+{s['start']}/TB,format=rgba[r{k}]")
         filters.append(f"{last}[r{k}]overlay=(W-w)/2:(H-h)/2:enable='between(t,{s['start']},{s['start'] + s['dur']})'[v{k}]")
         last = f'[v{k}]'
+        k += 1
     cmd = base + ['-i', str(mix)] + inputs
     if filters:
         cmd += ['-filter_complex', ';'.join(filters), '-map', last, '-map', '1:a']
