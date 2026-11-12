@@ -1,0 +1,18 @@
+[
+  {"id": "cold",    "min": 12, "dark": true, "vo": "Eight months after launch, a complaint arrives. Customers' ID numbers were collected with no stated reason, kept forever, and shared with a vendor no one checked."},
+  {"id": "who",     "min": 8,  "dark": true, "vo": "The first question is always the same. Who approved this? Nobody knows."},
+  {"id": "trace",   "min": 11, "dark": true, "vo": "Because the decision was made here, in a Jira ticket. Created on Tuesday. Shipped on Thursday. Not one privacy question asked."},
+  {"id": "stakes",  "min": 13, "dark": true, "vo": "And South Africa's Information Regulator is fining. One million rand for a major bank. Half a million for a college that shared personal information without a lawful reason."},
+  {"id": "why",     "min": 11, "dark": true, "vo": "It keeps happening because one Information Officer can't read four hundred tickets a sprint, and review only happens after the code ships."},
+  {"id": "rewind",  "min": 7,  "dark": true, "vo": "So, rewind. Same ticket. Same Tuesday. This time, with Preflight."},
+  {"id": "blocked", "min": 10, "vo": "The moment someone starts work, Preflight holds the ticket, and says exactly what's missing, and who approves it."},
+  {"id": "panel",   "min": 9,  "vo": "Four questions: the purpose, why less data won't do, the lawful basis, and when it's deleted."},
+  {"id": "rovo",    "min": 13, "vo": "Rovo can draft the answers. But a draft never counts until a person confirms it. AI can help. It can't approve."},
+  {"id": "inbox",   "min": 11, "vo": "The Information Officer sees it in one inbox, reads the answers, and signs off."},
+  {"id": "pass",    "min": 5,  "vo": "Now, work can start."},
+  {"id": "dodge",   "min": 12, "vo": "Reword the ticket, and it's still caught. Change an approved answer, and the approval goes stale."},
+  {"id": "done",    "min": 10, "vo": "Before Done, a second gate asks for proof: the updated privacy notice."},
+  {"id": "policy",  "min": 12, "vo": "The rules come from your own policy, and nothing is enforced until an approver switches it on."},
+  {"id": "payoff",  "min": 13, "vo": "Eight months later, someone asks the same question. Who approved this? This time, the answer takes ten seconds."},
+  {"id": "end",     "min": 6,  "vo": "Preflight. Privacy review, before you build."}
+]

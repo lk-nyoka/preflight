@@ -98,6 +98,9 @@ def music(total, tl):
         if t < starts['end']: return 0.6, 0.7, 0.0
         return 0.9, 1.0, 0.0
     tense = tension(calm_from + 0.8, starts)
+    if 'nocheck' in starts:  # the airport opening is calm; the unease only builds once tickets start taking off unchecked
+        _tt = np.arange(len(tense)) / SR
+        tense = tense * np.clip((_tt - starts['nocheck']) / 5.0, 0.1, 1)
     bars = int((total - calm_from) / bar) + 2
     rng = np.random.default_rng(3)
     for b in range(bars):
@@ -318,7 +321,7 @@ def video(tl, total, mix):
     sh(*cmd)
     # Captions burned in (for judges watching muted) as a second file
     sh('ffmpeg', '-y', '-i', str(out), '-vf',
-       f"subtitles={BUILD / 'preflight-demo.srt'}:force_style='FontName=Inter,FontSize=13,PrimaryColour=&H00FFFFFF,BackColour=&H80000000,BorderStyle=4,Outline=0,Shadow=0,MarginV=28'",
+       f"subtitles={BUILD / 'preflight-demo.srt'}:force_style='FontName=Inter,FontSize=13,PrimaryColour=&H00FFFFFF,BackColour=&H80000000,BorderStyle=4,Outline=0,Shadow=0,MarginV=10'",
        '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '19', '-pix_fmt', 'yuv420p', '-c:a', 'copy', str(BUILD / 'preflight-demo-captioned.mp4'))
     return out
 
