@@ -25,7 +25,7 @@ HERE = Path(__file__).parent
 BUILD = HERE / 'build'
 FPS = 30
 SR = 44100
-VO_OFFSET = 0.7
+VO_OFFSET = 0.5
 
 def sh(*cmd):
     subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
@@ -35,8 +35,8 @@ def make_timeline():
     scenes = json.loads((BUILD / 'scenes.voiced.json').read_text())
     t, tl = 0.0, []
     for s in scenes:
-        dur = round(max(s['min'], s['voDur'] + VO_OFFSET + 1.6), 2)
-        tl.append({'id': s['id'], 'start': round(t, 2), 'dur': dur, 'vo': s['vo'], 'voDur': s['voDur']})
+        dur = round(max(s['min'], s['voDur'] + VO_OFFSET + 0.9), 2)
+        tl.append({'id': s['id'], 'start': round(t, 2), 'dur': dur, 'vo': s['vo'], 'voDur': s['voDur'], 'native': s.get('native', dur)})
         t += dur
     (BUILD / 'timeline.json').write_text(json.dumps(tl, indent=1))
     return tl
@@ -80,56 +80,88 @@ def note(name):
 
 # ---------------------------------------------------------------- music
 def music(total, tl):
+    """Launch-film score: light and curious at the gate, held back for the problem,
+    then a clean four-on-the-floor groove from the moment Preflight appears."""
     n = int(SR * total) + SR
-    piano, pad, bass, pulse = (np.zeros(n) for _ in range(4))
-    bpm = 92; beat = 60 / bpm; bar = 4 * beat
-    prog = [  # bright, calm, Apple-keynote-ish
-        ['D3', 'A3', 'E4', 'F#4', 'A4', 'C#5'],   # Dmaj9
-        ['B2', 'F#3', 'D4', 'A4', 'C#5', 'E5'],   # Bm11
-        ['G2', 'D3', 'B3', 'F#4', 'A4', 'D5'],    # Gmaj9
-        ['A2', 'E3', 'C#4', 'E4', 'A4', 'B4'],    # A add9
+    pluck, pad, bass, drums = (np.zeros(n) for _ in range(4))
+    bpm = 112; beat = 60 / bpm; bar = 4 * beat
+    bright = [
+        ['D2', 'A3', 'E4', 'F#4', 'A4', 'C#5'],   # Dmaj9
+        ['B1', 'F#3', 'D4', 'A4', 'C#5', 'E5'],   # Bm11
+        ['G1', 'D3', 'B3', 'F#4', 'A4', 'D5'],    # Gmaj9
+        ['A1', 'E3', 'C#4', 'E4', 'A4', 'B4'],    # A add9
     ]
+    dark = [['B1', 'F#3', 'B3', 'D4', 'F#4', 'A4'], ['G1', 'D3', 'G3', 'B3', 'D4', 'F#4']]
+    by = {s['id']: s for s in tl}
     starts = {s['id']: s['start'] for s in tl}
-    calm_from = starts['rewind'] + 4.4   # the score turns calm and bright as "Preflight" appears
-    def intensity(t):
-        # calm score: piano and pad from the reveal, pulse while the product works, thinner for the payoff, swell at the end
-        if t < starts['blocked']: return 0.6, 0.6, 0.0
-        if t < starts['payoff']: return 0.7, 1.0, 0.55
-        if t < starts['end']: return 0.6, 0.7, 0.0
-        return 0.9, 1.0, 0.0
-    tense = tension(calm_from + 0.8, starts)
-    if 'nocheck' in starts:  # the airport opening is calm; the unease only builds once tickets start taking off unchecked
-        _tt = np.arange(len(tense)) / SR
-        tense = tense * np.clip((_tt - starts['nocheck']) / 5.0, 0.1, 1)
-    bars = int((total - calm_from) / bar) + 2
+    rw = by['rewind']; reveal = rw['start'] + 4.4 * rw['dur'] / rw.get('native', rw['dur'])
     rng = np.random.default_rng(3)
-    for b in range(bars):
-        chord = prog[b % 4]; t0 = calm_from + b * bar
-        padI, pianoI, pulseI = intensity(t0)
-        # pad: sustained chord, slow attack/release
-        dur = bar + 0.6; m = int(SR * dur); tt = np.arange(m) / SR
-        env = np.clip(tt / 0.9, 0, 1) * np.clip((dur - tt) / 0.9, 0, 1)
+    # one-shot drum samples
+    m = int(SR * 0.3); t = np.arange(m) / SR
+    kick = np.sin(2 * np.pi * (46 + 70 * np.exp(-t * 34)) * t) * np.exp(-t * 11)
+    hn = rng.standard_normal(int(SR * 0.08)); hat = (hn - lowpass_fast(hn, 7000)) * np.exp(-np.arange(len(hn)) / SR * 70)
+    cn = rng.standard_normal(int(SR * 0.22)); cn = lowpass_fast(cn, 4200) - lowpass_fast(cn, 900)
+    ct = np.arange(len(cn)) / SR; clap = cn * (np.exp(-ct * 24) + 0.6 * np.exp(-np.abs(ct - 0.012) * 300) + 0.5 * np.exp(-np.abs(ct - 0.024) * 300))
+    def section(t0):
+        if t0 < starts['storm'] - 0.6: return 'intro'
+        if t0 < reveal - 0.01: return 'dark'
+        if t0 < starts['payoff']: return 'groove'
+        if t0 < starts['end']: return 'lift'
+        return 'final'
+    first = -int(reveal / bar) - 1
+    for b in range(first, int((total - reveal) / bar) + 2):
+        t0 = reveal + b * bar
+        if t0 + bar < 0: continue
+        sec = section(max(t0, 0))
+        chord = (dark if sec == 'dark' else bright)[b % (2 if sec == 'dark' else 4)]
+        padI = {'intro': 0.7, 'dark': 0.55, 'groove': 0.9, 'lift': 0.8, 'final': 1.1}[sec]
+        dur = bar + 0.5; mm = int(SR * dur); tt = np.arange(mm) / SR
+        env = np.clip(tt / 0.5, 0, 1) * np.clip((dur - tt) / 0.5, 0, 1)
         sig = sum(np.sin(2 * np.pi * note(x) * tt) + 0.3 * np.sin(2 * np.pi * note(x) * 2.003 * tt) for x in chord[1:5])
-        place(pad, 0.045 * padI * sig * env * (1 + 0.08 * np.sin(2 * np.pi * 0.25 * tt)), t0)
-        # bass
-        place(bass, 0.16 * max(padI, pianoI) * tone(note(chord[0]), bar, harmonics=(1, 0.25), decay=0.6, attack=0.03), t0)
-        # piano arpeggio in eighths
-        if pianoI > 0:
-            pattern = [1, 3, 4, 5, 2, 4, 5, 3]
-            for k, idx in enumerate(pattern):
-                f = note(chord[idx]) * (2 if k in (3, 6) and pianoI > 0.8 else 1)
-                v = (0.55 if k % 2 == 0 else 0.38) * pianoI * (0.9 + 0.2 * rng.random())
-                place(piano, v * tone(f, 1.4, harmonics=(1, 0.42, 0.18, 0.07), decay=3.2), t0 + k * beat / 2 + 0.004 * rng.standard_normal())
-        # soft pulse (felt kick) on 1 and 3
-        if pulseI > 0:
-            for q in (0, 2):
-                m2 = int(SR * 0.28); tt2 = np.arange(m2) / SR
-                kick = np.sin(2 * np.pi * (48 + 50 * np.exp(-tt2 * 30)) * tt2) * np.exp(-tt2 * 14)
-                place(pulse, 0.22 * pulseI * kick, t0 + q * beat)
-    mix = 0.33 * piano + pad + bass + pulse
-    mix = reverb(lowpass_fast(mix, 7000), 2.2, 0.3)
+        place(pad, 0.04 * padI * sig * env, max(t0, 0)) if t0 >= 0 else None
+        if t0 < 0: continue
+        if sec == 'dark':
+            place(bass, 0.2 * tone(note(chord[0]) * 2, bar, harmonics=(1, 0.3), decay=0.8, attack=0.05), t0)
+            place(pluck, 0.3 * tone(note(chord[3]), 1.6, harmonics=(1, 0.4, 0.15), decay=2.5), t0)
+            continue
+        # plucked arpeggio in eighths
+        pattern = [1, 3, 4, 2, 5, 3, 4, 2] if sec != 'intro' else [1, 3, 4, 3, 5, 3, 4, 3]
+        pv = {'intro': 0.5, 'groove': 0.62, 'lift': 0.5, 'final': 0.7}[sec]
+        for k, idx in enumerate(pattern):
+            f = note(chord[idx]) * (2 if k in (4,) else 1)
+            v = (0.6 if k % 2 == 0 else 0.4) * pv * (0.9 + 0.2 * rng.random())
+            place(pluck, v * tone(f, 0.9, harmonics=(1, 0.5, 0.22, 0.09), decay=6.5), t0 + k * beat / 2)
+        # bass: eighth-note pulse in the groove, one long note elsewhere
+        if sec in ('groove', 'final'):
+            for k in range(8):
+                f = note(chord[0]) * (4 if k in (3, 7) else 2)
+                place(bass, 0.17 * tone(f, beat / 2, harmonics=(1, 0.5, 0.2), decay=7, attack=0.008), t0 + k * beat / 2)
+        else:
+            place(bass, 0.15 * tone(note(chord[0]) * 2, bar, harmonics=(1, 0.3), decay=0.7, attack=0.03), t0)
+        # drums
+        if sec == 'intro':
+            for q in (0, 2): place(drums, 0.22 * kick, t0 + q * beat)
+            for q in (1, 3): place(drums, 0.03 * hat, t0 + q * beat)
+        elif sec in ('groove', 'final'):
+            for q in range(4):
+                place(drums, 0.36 * kick, t0 + q * beat)
+                place(drums, 0.05 * hat, t0 + q * beat + beat / 2)
+            for q in (1, 3): place(drums, 0.10 * clap, t0 + q * beat)
+        elif sec == 'lift':
+            for q in (1, 3): place(drums, 0.07 * clap, t0 + q * beat)
+            for q in range(4): place(drums, 0.04 * hat, t0 + q * beat + beat / 2)
+    # riser into the reveal
+    rl = int(SR * 2.2); rt = np.arange(rl) / SR
+    riser = lowpass_fast(rng.standard_normal(rl), 5000) * (rt / 2.2) ** 2.5 * 0.09
+    place(drums, riser, max(reveal - 2.2, 0))
+    wet = reverb(lowpass_fast(0.34 * pluck + pad, 8000), 1.8, 0.26)
+    mix = wet + bass + lowpass_fast(drums, 11000)
     tt = np.arange(n) / SR
-    mix *= np.clip((tt - calm_from) / 1.2, 0, 1) * np.clip((total - tt) / 2.5, 0, 1)
+    mix *= np.clip(tt / 0.8, 0, 1) * np.clip((total - tt) / 2.2, 0, 1)
+    # unease under the problem scenes only
+    tense = tension(reveal + 0.3, starts)
+    _t = np.arange(len(tense)) / SR
+    tense = 0.8 * tense * np.clip((_t - (starts['storm'] - 1.0)) / 2.0, 0, 1)
     mix[: len(tense)] += tense[: n]
     return mix
 
@@ -236,8 +268,9 @@ def audio(tl, cues):
         hp = v - lowpass_fast(v, 3000)
         place(vo, 0.92 * (v + 0.25 * hp), s['start'] + VO_OFFSET)
         for cue in cues.get(s['id'], []):
-            kind, at = cue[0], cue[1]
-            length = cue[2] if len(cue) > 2 else None
+            k = s['dur'] / s.get('native', s['dur'])   # cues are written on the scene's own clock
+            kind, at = cue[0], cue[1] * k
+            length = cue[2] * k if len(cue) > 2 else None
             place(fx, sfx(kind, length), s['start'] + at)
     fx = reverb(fx, 0.9, 0.18, seed=11)
     mus = music(total, tl)[:n]

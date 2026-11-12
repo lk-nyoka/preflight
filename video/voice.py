@@ -6,7 +6,7 @@ out = here / 'build' / 'vo'; out.mkdir(parents=True, exist_ok=True)
 scenes = json.loads((here / 'scenes.json').read_text())
 for s in scenes:
     wav = out / f"{s['id']}.wav"
-    subprocess.run(['python3', '-m', 'piper', '-m', model, '-f', str(wav), '--length-scale', '1.07', '--sentence-silence', '0.35'],
+    subprocess.run(['python3', '-m', 'piper', '-m', model, '-f', str(wav), '--length-scale', '1.0', '--sentence-silence', '0.3'],
                    input=s['vo'].encode(), check=True, capture_output=True)
     with wave.open(str(wav)) as w:
         s['voDur'] = round(w.getnframes() / w.getframerate(), 2)
