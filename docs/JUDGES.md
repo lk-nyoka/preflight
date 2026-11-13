@@ -10,7 +10,8 @@
 
 ## 2. Load the demo (30 seconds)
 
-1. Create a project if you need one (any template; a Kanban project is fine). Note its key, for example `PRIV`.
+1. Create a space if you need one: **Kanban**, and choose **Company-managed** (team-managed spaces are not verified). Note its key, for example `PRIV`.
+   If Load demo reports a permission problem, the message names the role to add under Space settings → Permissions.
 2. **Jira settings (⚙) → Apps → Preflight → Setup → Load demo** with that key.
    This activates the POPIA starter rules (pick **GDPR (EU / EEA)** first if you prefer) and creates five sample work items: four that touch personal information and
    one control item ("Update footer copyright year").
@@ -18,8 +19,7 @@
 ## 3. Attach the two gates (2 minutes, one time)
 
 Open the project's workflow:
-- **Company-managed:** Project settings → Workflows → edit.
-- **Team-managed:** Project settings → Work types → open a type → Edit workflow.
+- Jira settings (⚙) → Work items → Workflows → edit the space's workflow (or Space settings → Workflows → edit).
 
 Then:
 1. Transition into **In Progress** → *Rules* / *Validators* → add **Preflight: privacy review before build**.
@@ -48,7 +48,7 @@ workflow editor vary slightly; look for *Rules* or *Validators* on the transitio
    happens on the work item itself, where the answers are.
 9. Optional, bypass detection: create a work item "Store customer passport numbers" and use a workflow without the
    gates (or drag it straight to Done in a project where the gates aren't attached). Within a few seconds Preflight
-   comments on it, mentioning the approvers, and it appears in the inbox under *Past a gate with the review open*.
+   comments on it (mentioning the approvers when approvers are named), and it appears in the inbox under *Past a gate with the review open*.
 10. **Setup → Test a rule**: paste any ticket text and see which rules match and why.
 11. Optional, **Rovo → Preflight agent** on a demo item: "What do I need before I can start this?", then "Help me answer
     the retention question". The answer appears in the panel as a **Rovo draft**; it only counts after you click
@@ -57,8 +57,8 @@ workflow editor vary slightly; look for *Rules* or *Validators* on the transitio
 ## Notes
 
 - Preflight **fails closed**: if it cannot evaluate a work item, the transition is held with a clear message.
-- To see governance: in **Settings**, name yourself as the only approver; then, from a second admin account, edit an
-  active rule (for example add "id number" to its *Ignore* list). The edit becomes a proposal; under *Preflight
+- To see governance: in **Settings**, name yourself as the only approver; then, from a second Jira admin account (this needs a second user on the site), edit an
+  active rule (for example add "id number" under *Never match these phrases*). The edit becomes a proposal; under *Preflight
   reviews* the approver sees it flagged *WEAKENS*, with the examples that no longer match.
-- The MCP tools (`rovo:mcp`, Preview) need an org admin to enable external MCP access; the demo video shows them.
+- The MCP tools (`rovo:mcp`, Preview) need an org admin to enable external MCP access. They are not shown in the demo video and have not been exercised live.
 - Preflight records your organisation's review. It is not legal advice and never says work is "compliant".

@@ -31,6 +31,6 @@ python3 voice.py && python3 build.py
 
 ## Adding real app footage
 
-Codegeist asks for the video to show the app running. Save a screen recording as `video/recordings/<scene>.mp4` (for example `blocked.mp4`, `copilot.mp4`, `tower.mp4`) and rebuild: the recording replaces that scene's animation, framed in a window, and is sped up to fit the narration. The click-by-click recording list is in the film plan.
+Codegeist asks for the video to show the app running. Save a screen recording as `video/recordings/<scene>.mp4` (for example `blocked.mp4`, `copilot.mp4`, `tower.mp4`) and rebuild: the recording replaces that scene's animation, framed in a window, and is sped up to fit the narration. Record at least `blocked`, `copilot` and `tower` on a site with Rovo: drag the SA ID item to In Progress and hold on the refusal; ask the Preflight agent to draft an answer, say yes, then click Use draft in the panel; open Preflight reviews, open the item and click Approve.
 
 The earlier dark "complaint" film is kept as `video/film-classic.html` and `video/scenes-classic.json`.

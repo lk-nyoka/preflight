@@ -120,6 +120,8 @@
   .endchips { display: flex; gap: 14px; margin-top: 46px; }
   .endchips span { padding: 11px 22px; border-radius: 999px; background: rgba(255,255,255,.86); border: 1px solid rgba(255,255,255,.95); font-size: 22px; font-weight: 600; color: #26344d;
     box-shadow: 0 18px 36px -18px rgba(16,28,72,.3); }
+  .brand { position: fixed; right: 110px; top: 70px; z-index: 50; display: flex; align-items: center; gap: 12px; padding: 11px 22px; border-radius: 999px; background: rgba(255,255,255,.82); backdrop-filter: blur(16px); border: 1px solid rgba(255,255,255,.95); box-shadow: 0 18px 36px -18px rgba(16,28,72,.3); font-size: 22px; font-weight: 600; color: #44546f; }
+  .brand b { font-size: 25px; font-weight: 750; letter-spacing: -.02em; background: linear-gradient(90deg, #0071e3, #7b4fe0); -webkit-background-clip: text; background-clip: text; color: transparent; }
 </style>
 </head>
 <body>
@@ -354,7 +356,7 @@
   </div>
   <div class="ring" id="tw-ring"></div>
   <div class="stamp" id="tw-stamp" style="left:1380px; top:290px;">CLEARED</div>
-  <div class="legendwrap"><div class="legend" id="tw-leg"><b>In Jira</b>Only a named approver can sign off, from one inbox of waiting tickets.</div></div>
+  <div class="legendwrap"><div class="legend" id="tw-leg"><b>In Jira</b>Approvers see every waiting ticket in one inbox, and sign off on the ticket.</div></div>
 </section>
 
 <!-- 11. YOU CAN'T SNEAK PAST -->
@@ -461,6 +463,7 @@
 
 
 
+<div class="brand" id="brand"><b>Preflight</b>privacy review for Jira</div>
 <script>
 const $ = (id) => document.getElementById(id);
 const clamp = (x, a = 0, b = 1) => Math.max(a, Math.min(b, x));
@@ -678,6 +681,7 @@ window.render = function render(t) {
   const active = tl.find((s) => t >= s.start && t < s.start + s.dur) || tl[tl.length - 1];
   if (!active) return;
   const lt = t - active.start, d = active.dur;
+  $('brand').style.opacity = DARK.has(active.id) || active.id === 'end' ? 0 : clamp(seg(t, 0.3, 1.0));
   const el = $(SCENE_EL[active.id] || active.id);
   document.body.style.background = DARK.has(active.id) ? '#050507' : '';
   const fade = clamp(seg(lt, 0, 0.45) * (1 - seg(lt, d - 0.45, d)));

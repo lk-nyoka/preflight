@@ -420,7 +420,7 @@ const App = () => {
 
         <TabPanel>
           <Stack space="space.100">
-            <Text>Rule, setting and demo changes. Events are write-once: Preflight has no way to edit or delete them.</Text>
+            <Text>Rule, setting and demo changes. Events are write-once: nobody can edit or delete them. The one exception is Atlassian’s privacy rule: when an account is closed, its ID is replaced with “closed-account”.</Text>
             <DynamicTable
               head={{ cells: ['When', 'Who', 'What'].map((c, i) => ({ key: `h${i}`, content: c })) }}
               rows={state.audit.map((e, i) => ({

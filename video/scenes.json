@@ -5,7 +5,7 @@
   {"id": "stakes", "min": 4.5, "native": 13.34, "vo": "Regulators are asking too. One million rand for a bank. Half a million for a college.", "dark": true},
   {"id": "rewind", "min": 4.5, "native": 8.11, "vo": "So let's go back to the gate. This is Preflight.", "dark": true},
   {"id": "scan", "min": 4.5, "native": 14.38, "vo": "Step one. The scanner. Preflight reads every Jira ticket as it's written, and spots personal data on board. ID numbers. Health details. Children's data."},
-  {"id": "blocked", "min": 4.5, "native": 12.67, "vo": "Step two. The gate. Start work too soon, and it stays closed. Three questions first. Why do you need it? What's your lawful basis? When is it deleted?"},
+  {"id": "blocked", "min": 4.5, "native": 12.67, "vo": "Step two. The gate. Start work too soon, and it stays closed. A short checklist first. Why do you need it? What's your lawful basis? When is it deleted?"},
   {"id": "copilot", "min": 4.5, "native": 11.65, "vo": "Step three. Your co-pilot. Rovo drafts the answers. A person confirms them. AI can help. It can't approve."},
   {"id": "tower", "min": 4.5, "native": 11.78, "vo": "Step four. The control tower. Nicholas, the Information Officer, sees every waiting ticket, and clears it for take-off."},
   {"id": "takeoff", "min": 4.5, "native": 6, "vo": "Gate open. Ben is cleared to build."},

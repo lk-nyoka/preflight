@@ -166,7 +166,7 @@ function RuleCard({ match, state, act, busy }) {
           <Heading size="small">{match.title}</Heading>
           <Tag text={match.clause} />
           <Lozenge appearance={match.satisfied ? 'success' : match.buildSatisfied ? 'inprogress' : 'removed'}>
-            {match.satisfied ? 'Done' : match.buildSatisfied ? 'Approved, evidence due' : 'Review needed'}
+            {match.satisfied ? 'Done' : match.buildSatisfied ? 'Cleared to build, evidence due' : 'Review needed'}
           </Lozenge>
         </Inline>
         <Text>{match.summary}</Text>
@@ -277,7 +277,7 @@ const App = () => {
 
       {state.bypass && !state.bypass.resolvedAt && (
         <SectionMessage appearance="error" title={`This work item is in "${state.bypass.status}" with its privacy review still open`}>
-          <Text>It got past a Preflight gate without the review being complete (moved from another space, changed work type, a workflow without the gate, or the review went stale afterwards). The approvers have been told. Finish the steps below.</Text>
+          <Text>It got past a Preflight gate without the review being complete (moved from another space, changed work type, a workflow without the gate, or the review went stale afterwards). A comment has been added to this work item. Finish the steps below.</Text>
         </SectionMessage>
       )}
 
@@ -302,7 +302,7 @@ const App = () => {
 
       {!state.hasActiveRules && (
         <SectionMessage appearance="information" title="No Preflight rules are active yet">
-          <Text>A Jira admin can review and activate the POPIA starter rules under Jira settings → Apps → Preflight.</Text>
+          <Text>A Jira admin can review and activate the POPIA or GDPR starter rules under Jira settings → Apps → Preflight.</Text>
         </SectionMessage>
       )}
 
@@ -369,7 +369,7 @@ const App = () => {
 
       {state.audit.length > 0 && (
         <Stack space="space.050">
-          <Text><Strong>Audit history</Strong> <Em>(write-once)</Em></Text>
+          <Text><Strong>Audit history</Strong> <Em>(write-once; a closed Atlassian account later reads “closed-account”)</Em></Text>
           {audit.map((entry) => (
             <Inline key={`${entry.at}-${entry.event}`} space="space.100" alignBlock="center" shouldWrap>
               <Text>{when(entry.at)}</Text>

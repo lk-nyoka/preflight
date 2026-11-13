@@ -9,7 +9,7 @@ const TYPES = ['answer', 'choice', 'link', 'approval'];
 const STAGES = ['build', 'done'];
 
 const split = (v) =>
-  (Array.isArray(v) ? v : String(v || '').split(/[\n,]/)).map((s) => String(s).trim()).filter(Boolean).slice(0, 80);
+  (Array.isArray(v) ? v : String(v || '').split(/[\n,]/)).map((s) => String(s).trim()).filter(Boolean).slice(0, 300);
 
 const slug = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40);
 

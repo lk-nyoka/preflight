@@ -24,8 +24,11 @@ export const CLOSED = 'closed-account';
 /** Fields that hold an Atlassian account ID (a string or a list of them). */
 const ACCOUNT_FIELDS = new Set([
   'by', 'actor', 'accountId', 'activatedBy', 'confirmedBy', 'resetBy', 'raisedBy', 'approverAccountIds',
-  'reporterAccountId', 'assigneeAccountId', 'requestedBy', 'decidedBy',
+  'reporterAccountId', 'assigneeAccountId', 'requestedBy', 'decidedBy', 'for',
 ]);
+/** Approver-list changes keep the old and new lists in the audit entry's details. */
+const ID_LIST_FIELDS = new Set(['before', 'after']);
+const isIdList = (k, v) => ID_LIST_FIELDS.has(k) && Array.isArray(v) && v.every((x) => typeof x === 'string');
 const NOT_PEOPLE = new Set(['app', 'engine', 'unknown', 'unknown-user', CLOSED, '']);
 const isPerson = (v) => typeof v === 'string' && !NOT_PEOPLE.has(v);
 
@@ -62,7 +65,7 @@ function walk(value, found, at = null) {
   if (!value || typeof value !== 'object') return;
   const here = typeof value.at === 'number' ? value.at : typeof value.updatedAt === 'number' ? value.updatedAt : at;
   for (const [k, v] of Object.entries(value)) {
-    if (ACCOUNT_FIELDS.has(k)) {
+    if (ACCOUNT_FIELDS.has(k) || isIdList(k, v)) {
       for (const id of Array.isArray(v) ? v : [v]) if (isPerson(id)) found(id, here);
     } else if (v && typeof v === 'object') {
       walk(v, found, here);
@@ -88,8 +91,13 @@ export function anonymise(value, closed) {
   if (!value || typeof value !== 'object') return value;
   const out = {};
   for (const [k, v] of Object.entries(value)) {
-    if (ACCOUNT_FIELDS.has(k)) {
-      if (k === 'approverAccountIds') out[k] = (v || []).filter((id) => !closed.has(id));
+    if (ACCOUNT_FIELDS.has(k) || isIdList(k, v)) {
+      if (k === 'approverAccountIds') {
+        // Losing the last approver must not quietly hand approval to every Jira admin: keep the site in
+        // named-approver mode with a placeholder, so admins have to use the audited 72-hour reset.
+        const kept = (v || []).filter((id) => !closed.has(id));
+        out[k] = kept.length || !(v || []).length ? kept : [CLOSED];
+      }
       else if (Array.isArray(v)) out[k] = [...new Set(v.map((id) => (closed.has(id) ? CLOSED : id)))];
       else out[k] = closed.has(v) ? CLOSED : v;
     } else {

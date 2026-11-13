@@ -35,7 +35,7 @@ Preflight is a Forge app for Jira that turns an organisation's privacy review in
 - **The panel says what to do next and who approves.** Questions are grouped *before work starts* and *before Done*.
 - **An inbox for the Information Officer.** *Preflight reviews* lists everything waiting for approval and everything waiting on the team.
 - **Rovo helps, humans decide.** The Preflight agent explains the gaps and drafts answers with the developer, but a draft only counts after the person confirms it in the panel. The agent can never approve, dismiss, grant exceptions, activate rules, or declare that a change has no personal data.
-- **Rules come from your policy.** Admins ask the agent to turn a Confluence policy page into **draft** rules, with example tickets that must and must not match. Nothing is enforced until it is activated.
+- **Rules come from your policy.** Admins give the agent their policy text (pasted, or a page shared in the Rovo chat) and it proposes **draft** rules, with example tickets that must and must not match. Nothing is enforced until it is activated.
 - **Answers have to be real.** "TBD", "not sure" and keyboard filler are rejected, and a retention answer has to say when the data goes.
 - **Governance built in.** Once approvers are named, a Jira admin can't approve, can't add themselves as approver, and an admin's changes to active rules become proposals. The approver sees every changed field, with anything that weakens the rule flagged first and the rule's examples re-run against the new version. Weakening a setting needs an approver, a break-glass reset needs a second admin and 72 hours, and bulk actions can't switch enforcement off.
 - **Bypasses are caught.** Work that reaches In Progress or Done another way (moved from another project, changed type, a workflow without the gate) is flagged to the approvers in a comment and in the inbox.
@@ -54,7 +54,7 @@ Preflight enforces your organisation's own review process. It never says work is
 - **Rovo agent** (`rovo:agent` with seven `action` modules) and **`rovo:mcp`** exposing the read-only check and rule tools plus a rate-limited approval request to coding agents.
 - **Trust engineering on KVS.** Audit events are separate keys written with `FAIL_IF_EXISTS`, so history can't be rewritten through the app. Record updates run under a per-ticket lock (a `FAIL_IF_EXISTS` key with a TTL) so concurrent saves don't overwrite each other. Approvals carry a fingerprint of the answers they approved and go stale if those answers or the rule change. Evidence is deleted with its ticket.
 - **Permissions are checked server-side** in every resolver and action. The panel always takes the issue from Jira's context, never from the request.
-- **77 automated tests** cover the engine, the matcher corpus and end-to-end flows with Jira and storage faked, plus regression tests for the holes found by three independent reviews of the code (for example: an admin hiding a weakened rule from the approver, overriding someone else's "Yes" in two steps, or an approval surviving a rule change).
+- **84 automated tests** cover the engine, the matcher corpus and end-to-end flows with Jira and storage faked, plus regression tests for the holes found by three independent reviews of the code (for example: an admin hiding a weakened rule from the approver, overriding someone else's "Yes" in two steps, or an approval surviving a rule change).
 
 ## Challenges
 
@@ -74,8 +74,8 @@ Preflight enforces your organisation's own review process. It never says work is
 
 ## What's next
 
-- JSM support for data-subject access requests (POPIA s23) and a GDPR rule pack.
-- Reading policy pages from Confluence directly into rule proposals.
+- JSM support for data-subject access requests (POPIA s23, GDPR Art 15), and more starter packs beyond POPIA and GDPR.
+- Watching a Confluence policy page and proposing rule changes when the policy changes.
 - A Marketplace listing for South African teams.
 ```
 
@@ -92,7 +92,7 @@ forge, atlassian-forge, jira, jira-cloud, rovo, rovo-agents, mcp, forge-ui-kit, 
 
 ## Demo video URL
 
-[[YouTube link. Follow docs/DEMO_SCRIPT.md: the blocked "In Progress" move happens by 0:30 and the whole story ends by 3:00.]]
+[[YouTube link. The film is 2:13 (docs/DEMO_SCRIPT.md). It must include real screen recordings of the app before you upload it.]]
 
 ## Installation link
 

@@ -377,7 +377,7 @@ export async function requestApproval(issueIdOrKey, actor, message = '', via = '
   }
   if (via !== 'panel') await rateLimit(`rl:approval:${actor}`, 10, 60 * 60 * 1000, 'You have requested a lot of approvals in the last hour. Try again later.');
   const settings = await getSettings();
-  const mentions = settings.approverAccountIds.slice(0, 5).flatMap((id) => [{ type: 'mention', attrs: { id } }, { type: 'text', text: ' ' }]);
+  const mentions = settings.approverAccountIds.filter((id) => id !== 'closed-account').slice(0, 5).flatMap((id) => [{ type: 'mention', attrs: { id } }, { type: 'text', text: ' ' }]);
   const lines = result.open.map((o) => `• ${o.ruleTitle} (${o.ruleClause}): ${o.label}, ${o.reason.toLowerCase()}`);
   const body = {
     type: 'doc',
@@ -435,7 +435,7 @@ export async function checkBypass({ workItem, result, record }) {
   await appendAudit('admin', { by: 'app', via: 'engine', action: 'gate.bypassed', event, issueKey: workItem.key }).catch(() => {});
   try {
     const settings = await getSettings();
-    const mentions = settings.approverAccountIds.slice(0, 5).flatMap((id) => [{ type: 'mention', attrs: { id } }, { type: 'text', text: ' ' }]);
+    const mentions = settings.approverAccountIds.filter((id) => id !== 'closed-account').slice(0, 5).flatMap((id) => [{ type: 'mention', attrs: { id } }, { type: 'text', text: ' ' }]);
     await addComment(workItem.key, {
       type: 'doc',
       version: 1,

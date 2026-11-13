@@ -23,9 +23,11 @@ import { reportAndErase } from './privacy.js';
  *   stage "done":  attach to the transition into Done ("evidence before done")
  */
 async function validate(issue, stage) {
+  const ref = issue?.id || issue?.key;   // read once, so a malformed payload still reaches the fail-closed path
   try {
+    if (!ref) throw new Error('the transition payload named no work item');
     // The gate also remembers what matched (best effort: a storage hiccup never changes its decision).
-    const { workItem, result } = await assess(issue.id || issue.key, { asUser: false, persist: 'best-effort' });
+    const { workItem, result } = await assess(ref, { asUser: false, persist: 'best-effort' });
     await markGateSeen(workItem.projectKey, workItem.key, stage).catch(() => {});
     const view = stage === 'build' ? result.stages.build : result.stages.done;
     if (view.status === 'blocked') {
@@ -39,7 +41,7 @@ async function validate(issue, stage) {
   } catch (error) {
     console.error(`Preflight ${stage} gate failed`, error);
     const { failClosed } = await getSettings().catch(() => ({ failClosed: true }));
-    await appendAudit(issue.id || issue.key, {
+    await appendAudit(ref || 'admin', {
       by: 'app', via: 'engine', event: `Gate (${stage}) could not evaluate: ${String(error.message).slice(0, 120)}; ${failClosed ? 'held (fail-closed)' : 'allowed (fail-open)'}`,
     }).catch(() => {});
     return failClosed
@@ -81,7 +83,7 @@ async function approverNames() {
   try {
     const { approverAccountIds } = await getSettings();
     if (!approverAccountIds.length) return 'any Jira admin (small-team mode)';
-    const names = await Promise.all(approverAccountIds.slice(0, 3).map((id) => getDisplayName(id).catch(() => null)));
+    const names = await Promise.all(approverAccountIds.filter((id) => id !== 'closed-account').slice(0, 3).map((id) => getDisplayName(id).catch(() => null)));
     const known = names.filter(Boolean);
     return known.length ? known.join(' or ') : '';
   } catch {

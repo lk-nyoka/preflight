@@ -38,7 +38,9 @@ async function mode() {
   return { settings, named: settings.approverAccountIds.length > 0 };
 }
 const isApprover = (settings, actor) => settings.approverAccountIds.includes(actor);
-const substantive = (r) => JSON.stringify({ t: r.title, c: r.clause, s: r.summary, tr: r.triggers, rq: r.requirements, sev: r.severity });
+// Key order and editor defaults must not count as a change: compare canonical JSON of the cleaned form.
+const canon = (v) => (Array.isArray(v) ? v.map(canon) : v && typeof v === 'object' ? Object.fromEntries(Object.keys(v).sort().map((k) => [k, canon(v[k])])) : v);
+const substantive = (r) => JSON.stringify(canon({ t: r.title, c: r.clause, s: r.summary, tr: r.triggers, rq: r.requirements, sev: r.severity }));
 
 /**
  * Field-complete diff an approver can judge. Every trigger and requirement field
@@ -134,7 +136,7 @@ export const saveRuleChange = locked(async (input, originalId, actor) => {
   if (!existing && rules.some((r) => r.id === id)) throw new PreflightError(`A rule with id ${id} already exists.`);
   let cleaned = cleanRule({ ...input, id }, existing);
   // Only a substantive change bumps the version (which makes existing approvals stale).
-  if (existing && substantive(existing) === substantive(cleaned)) cleaned = { ...cleaned, updatedAt: existing.updatedAt };
+  if (existing && (substantive(existing) === substantive(cleaned) || substantive(cleanRule(existing, existing)) === substantive(cleaned))) cleaned = { ...cleaned, updatedAt: existing.updatedAt };
   const { settings, named } = await mode();
   const change = diff(existing, cleaned);
   if (existing?.status === 'active' && !named && change.weakens && coolingDown(settings, actor)) {

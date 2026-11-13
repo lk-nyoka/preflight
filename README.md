@@ -28,7 +28,7 @@ Built on Atlassian Forge for Codegeist 2026.
 | Surface | What happens |
 |---|---|
 | **Issue panel** | "Start work" and "Close" status, a next-step box that says exactly what to do and who approves, each matching rule with its clause and the phrase that triggered it, questions grouped *Before work starts* / *Before Done*, Rovo drafts to confirm or discard, and the audit history. |
-| **Two workflow validators** | `Preflight: privacy review before build` (attach to the transition into In Progress) and `Preflight: privacy evidence before Done` (into Done). Declared for company-managed and team-managed projects (team-managed not yet verified live). The refusal message names what is missing and who approves. |
+| **Two workflow validators** | `Preflight: privacy review before build` (attach to the transition into In Progress) and `Preflight: privacy evidence before Done` (into Done). Verified on company-managed spaces; declared for team-managed too, but not yet verified there. The refusal message names what is missing and who approves. |
 | **Preflight reviews (global page)** | The approver's inbox: work that got past a gate with its review open, work waiting for approval, work waiting on the team, exceptions with their expiry, and proposed rule changes with a full diff. Filtered to work items the viewer can see. Approval itself happens on the work item, where the answers are. |
 | **Rovo agent** | Explains why a rule matched, drafts answers with the developer (saved as **drafts** that a person must confirm), requests approval, records "yes/unsure" declarations, flags missed rules, and for admins turns a privacy policy page into **draft** rules with examples. |
 | **MCP tools** | `rovo:mcp` exposes `preflight-check-issue` and `preflight-list-rules` (read-only) and `preflight-request-approval` (rate-limited) so coding agents can check a ticket before writing code.¹ |
@@ -118,7 +118,7 @@ listed in the inbox under *Past a gate with the review open*.
 **Write-once audit.** Every answer, draft, approval, dismissal, exception, declaration, rule change, setting change,
 bypass and gate failure is its own key written with `FAIL_IF_EXISTS`. Preflight never edits or deletes an audit event,
 with one exception the law requires: when Atlassian reports that an account is closed, its ID is replaced by
-`closed-account` everywhere, the audit history included (see *Personal data reporting*). Answer values are not copied into audit events. Free-text reasons (dismissals, exceptions, approval
+`closed-account` everywhere, the audit history, Rovo drafts and approver-list history included (see *Personal data reporting*). Answer values are not copied into audit events. Free-text reasons (dismissals, exceptions, approval
 notes, reset reasons) are kept with e-mail addresses and digit runs removed, and the UI asks people not to include
 personal details; names or addresses typed into a reason would be kept. "Write-once" is a property of Preflight's code:
 uninstalling the app, or deploying different code, can still remove app storage.
@@ -150,11 +150,15 @@ who claimed the evidence and when; it does not check the page.
 Jira's workflow search returns, and whether the matching gate is attached. Team-managed project workflows may not be
 returned by that API, so check those by hand. Bypass detection (above) is the safety net for whatever coverage misses.
 
-**Not yet verified on a live Jira site.** These were built from Atlassian's documentation and are covered by tests
-with Jira faked, but have not yet been exercised end to end: the validator payload shape and team-managed support,
-`nodejs24.x`, KVS `ttl` together with `FAIL_IF_EXISTS`, the response shapes of the two workflow APIs, Rovo action
-context (`context.principal`) and `api.asUser()` inside Rovo and MCP calls (`rovo:mcp` is Preview), and a few UI Kit
-props. The first deploy should confirm each; see `docs/DEPLOY.md`.
+**Verified on live Jira sites (November 2026).** On a company-managed space: both workflow validators (the refusal
+message, then the move once the review is complete), the Done gate, sticky matches after rewording, the workflow
+coverage check, `nodejs24.x`, and the admin page, panel and inbox. On a Forge demo site with Rovo: the agent's check
+and draft actions, including the acting user's identity (`context.principal`), with the draft confirmed by a person in
+the panel and recorded as "via Rovo" in the audit history.
+
+**Not yet exercised live:** team-managed spaces (use a company-managed space), the MCP tools (`rovo:mcp` is Preview
+and needs an org admin to enable external MCP access), the weekly personal-data report, and lock expiry under real
+contention. These are covered by tests with Jira faked; see `docs/DEPLOY.md`.
 
 ---
 
@@ -178,7 +182,7 @@ forge install --product jira --site <your-site>.atlassian.net
 Then: **Jira settings → Apps → Preflight → Setup → Load demo**, attach both gates, and drag *Add SA ID number field to
 customer signup* to In Progress.
 
-`npm test` runs 81 tests: the engine, the matcher regression corpus (including all three blind-test sets), end-to-end
+`npm test` runs 84 tests: the engine, the matcher regression corpus (including all three blind-test sets), end-to-end
 flows with Jira and storage faked (two-stage gating, stale approvals, sticky matches, drafts that don't count,
 governance of approvers and active rules, write-once audit, locks, exception expiry, rate limiting, fail-closed,
 deletion, coverage), and regression tests for the holes found by the independent audits (`test/exploits.test.js`). They do not replace testing real transitions on a developer site.
