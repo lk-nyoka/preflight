@@ -178,7 +178,7 @@ forge install --product jira --site <your-site>.atlassian.net
 Then: **Jira settings → Apps → Preflight → Setup → Load demo**, attach both gates, and drag *Add SA ID number field to
 customer signup* to In Progress.
 
-`npm test` runs 77 tests: the engine, the matcher regression corpus (including all three blind-test sets), end-to-end
+`npm test` runs 81 tests: the engine, the matcher regression corpus (including all three blind-test sets), end-to-end
 flows with Jira and storage faked (two-stage gating, stale approvals, sticky matches, drafts that don't count,
 governance of approvers and active rules, write-once audit, locks, exception expiry, rate limiting, fail-closed,
 deletion, coverage), and regression tests for the holes found by the independent audits (`test/exploits.test.js`). They do not replace testing real transitions on a developer site.

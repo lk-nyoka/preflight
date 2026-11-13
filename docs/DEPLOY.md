@@ -27,7 +27,7 @@ Commit the `manifest.yml` change that `forge register` made.
 
 ## 3. Check the things that could only be tested live
 
-The code is covered by 77 tests with Jira faked. These behaviours depend on the real platform. Check each one once
+The code is covered by 81 tests with Jira faked. These behaviours depend on the real platform. Check each one once
 and note anything odd. `forge logs` (or `forge tunnel` while you click) shows server errors.
 
 | # | Check | How | If it fails |
