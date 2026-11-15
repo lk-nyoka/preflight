@@ -70,7 +70,7 @@ Preflight enforces your organisation's own review process. It never says work is
 
 - How Forge validators, triggers, entity properties, KVS key policies and TTLs, Rovo actions and `rovo:mcp` fit together into one product.
 - That trust features (stale approvals, sticky matches, write-once audit, governance) matter more in a compliance tool than clever AI.
-- [[Add one or two things you learned building it.]]
+- [[Add one or two things you learned, in your own words. For example: what deploying and testing on a real Jira site taught you that the automated tests did not.]]
 
 ## What's next
 
@@ -92,7 +92,9 @@ forge, atlassian-forge, jira, jira-cloud, rovo, rovo-agents, mcp, forge-ui-kit, 
 
 ## Demo video URL
 
-[[YouTube link. The film is 2:55 (docs/DEMO_SCRIPT.md) and includes real screen recordings of the app on a Jira site: the refused move, the Rovo agent drafting, the inbox and the sign-off.]]
+[[Paste your YouTube link here.]]
+
+The film is 2:50 (`video/preflight-launch-demo-captioned.mp4`). It includes real screen recordings of the app on a Jira site (the refused move, the Rovo agent drafting, the inbox and the sign-off), marked "LIVE IN JIRA · REAL RECORDING". The other product scenes are labelled illustrations. Narration is a synthetic voice; music and sound effects are generated in code.
 
 ## Installation link
 
@@ -104,18 +106,22 @@ https://developer.atlassian.com/console/install/e9581f7b-84df-42b6-a25d-0cfb7c31
 Full guide: https://github.com/lk-nyoka/preflight/blob/main/docs/JUDGES.md
 
 1. Install with the link above on a Jira site where you are a Jira admin.
-2. Jira settings → Apps → Preflight → Setup → enter any project key → Load demo.
-   This activates the POPIA starter rules and creates 5 sample work items.
-3. Attach the gates (one time): in the project's workflow, add
+2. Create a Kanban space and choose Company-managed (team-managed is not verified). Note its key, e.g. PRIV.
+   Jira settings → Apps → Preflight → Setup → choose POPIA → enter the key → Load demo.
+   This activates the POPIA starter rules and creates 5 sample work items. If it reports a permission
+   problem, the message names the role to add under Space settings → Permissions.
+3. Attach the gates (one time): Jira settings → Work items → Workflows → edit the space's workflow, add
    "Preflight: privacy review before build" to the transition into In Progress and
    "Preflight: privacy evidence before Done" to the transition into Done. Publish.
    Setup → Check workflow coverage should show both as protected.
 4. Open "Add SA ID number field to customer signup" and drag it to In Progress: refused.
-5. Answer the 4 questions → Save → Approve (Jira admins approve in small-team mode) → In Progress works.
+5. Click the Preflight (hexagon) icon under the title to open the panel. Answer the 4 questions → Save answers →
+   Approve (with no approvers named, a Jira admin can approve) → drag to In Progress: it moves.
 6. Drag to Done: refused until "Privacy notice updated (link)" is filled in.
 7. Edit an approved answer: the approval goes stale and the gate closes again.
 8. Apps → Preflight reviews shows the approver's inbox.
-9. Optional: Rovo → Preflight agent: "What do I need before I can start this?"
+9. Optional, on a site with Rovo: Ask Rovo → Agents → Preflight: "Check PRIV-1 and draft an answer for the purpose question".
+   Say yes, then click Use draft in the panel.
 No external services or credentials are needed.
 ```
 
@@ -155,7 +161,7 @@ Best Agents - Rovo/Assignable agents
 
 ## AI tools used
 
-Claude (Anthropic) for planning, research on Forge modules and POPIA sections, writing code and tests, independent review of the code, and drafting documentation. [[Add any others you used.]]
+Claude (Anthropic) for planning, research on Forge modules and POPIA sections, writing code and tests, independent review of the code, and drafting documentation, and producing the demo film (animation code, generated music and sound effects, and a synthetic narration voice from the open-source Piper model). [[Add any others you used.]]
 
 ## How much did this hackathon help you develop new skills?
 
