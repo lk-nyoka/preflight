@@ -36,7 +36,7 @@ def make_timeline():
     t, tl = 0.0, []
     for s in scenes:
         dur = round(max(s['min'], s['voDur'] + VO_OFFSET + 0.9), 2)
-        tl.append({'id': s['id'], 'start': round(t, 2), 'dur': dur, 'vo': s['vo'], 'voDur': s['voDur'], 'native': s.get('native', dur)})
+        tl.append({'id': s['id'], 'start': round(t, 2), 'dur': dur, 'vo': s['vo'], 'voDur': s['voDur'], 'native': s.get('native', dur), **({'clip': s['clip']} if s.get('clip') else {})})
         t += dur
     (BUILD / 'timeline.json').write_text(json.dumps(tl, indent=1))
     return tl
@@ -337,11 +337,15 @@ def video(tl, total, mix):
     for s in overlays:
         clip = rec / f"{s['id']}.mp4"
         inputs += ['-i', str(clip)]
-        # A take longer than its scene is sped up to fit (at most 3x), so nothing is cut off.
-        speed = max(1.0, min(3.0, probe_seconds(clip) / s['dur']))
-        # Apple-style frame: scale into a rounded window on the soft background
-        filters.append(f"[{k}:v]scale=1600:-2,fps={FPS},setpts=(PTS-STARTPTS)/{speed:.4f}+{s['start']}/TB,format=rgba[r{k}]")
-        filters.append(f"{last}[r{k}]overlay=(W-w)/2:(H-h)/2:enable='between(t,{s['start']},{s['start'] + s['dur']})'[v{k}]")
+        # The take is retimed to fill its scene exactly (inside the scene's fade), so nothing is cut off or frozen.
+        g = s.get('clip') or {'w': 1600}
+        st, win = s['start'] + 0.45, max(s['dur'] - 0.9, 0.5)
+        speed = max(0.4, min(3.5, probe_seconds(clip) / win))
+        pos = f"{g['x']}:{g['y']}" if 'x' in g else '(W-w)/2:(H-h)/2'
+        filters.append(
+            f"[{k}:v]scale={g['w']}:-2,setpts=(PTS-STARTPTS)/{speed:.4f},fps={FPS},trim=duration={win:.3f},format=rgba,"
+            f"fade=t=in:st=0:d=0.25:alpha=1,fade=t=out:st={win - 0.25:.3f}:d=0.25:alpha=1,setpts=PTS+{st}/TB[r{k}]")
+        filters.append(f"{last}[r{k}]overlay={pos}:eof_action=pass:enable='between(t,{st},{st + win})'[v{k}]")
         last = f'[v{k}]'
         k += 1
     cmd = base + ['-i', str(mix)] + inputs

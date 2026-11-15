@@ -1,4 +1,4 @@
-# Preflight: demo film script (2:13)
+# Preflight: demo film script (2:55)
 
 The film explains Preflight with one picture: a plane cannot leave the gate until its pre-flight check is done. Each part of the app has an airport equivalent, and a line on screen says what it is in Jira. Characters: **Nicholas**, the Information Officer, and **Ben**, a developer. The company, complaint and people are illustrative.
 
@@ -29,8 +29,8 @@ cd video
 python3 voice.py && python3 build.py
 ```
 
-## Adding real app footage
+## Real app footage
 
-Codegeist asks for the video to show the app running. Save a screen recording as `video/recordings/<scene>.mp4` (for example `blocked.mp4`, `copilot.mp4`, `tower.mp4`) and rebuild: the recording replaces that scene's animation, framed in a window, and is sped up to fit the narration. Record at least `blocked`, `copilot` and `tower` on a site with Rovo: drag the SA ID item to In Progress and hold on the refusal; ask the Preflight agent to draft an answer, say yes, then click Use draft in the panel; open Preflight reviews, open the item and click Approve.
+Five scenes are real screen recordings of Preflight on a Jira site, cut from one take and stored in `video/recordings/`: `hook` (the refusal message, opening the film), `live_blocked` (the refused move), `live_rovo` (the Rovo agent checks, drafts and saves a draft; Use draft in the panel), `live_inbox` (the review inbox) and `live_approve` (Save answers, Approve, the signed-off record). Each follows the animated scene that explains it. The browser bar is cropped out. The recordings show the entrant's own name as reporter and approver; the animated scenes use the characters Nicholas and Ben.
 
 The earlier dark "complaint" film is kept as `video/film-classic.html` and `video/scenes-classic.json`.

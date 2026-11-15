@@ -92,7 +92,7 @@ forge, atlassian-forge, jira, jira-cloud, rovo, rovo-agents, mcp, forge-ui-kit, 
 
 ## Demo video URL
 
-[[YouTube link. The film is 2:13 (docs/DEMO_SCRIPT.md). It must include real screen recordings of the app before you upload it.]]
+[[YouTube link. The film is 2:55 (docs/DEMO_SCRIPT.md) and includes real screen recordings of the app on a Jira site: the refused move, the Rovo agent drafting, the inbox and the sign-off.]]
 
 ## Installation link
 

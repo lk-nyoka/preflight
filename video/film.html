@@ -122,6 +122,14 @@
     box-shadow: 0 18px 36px -18px rgba(16,28,72,.3); }
   .brand { position: fixed; right: 110px; top: 70px; z-index: 50; display: flex; align-items: center; gap: 12px; padding: 11px 22px; border-radius: 999px; background: rgba(255,255,255,.82); backdrop-filter: blur(16px); border: 1px solid rgba(255,255,255,.95); box-shadow: 0 18px 36px -18px rgba(16,28,72,.3); font-size: 22px; font-weight: 600; color: #44546f; }
   .brand b { font-size: 25px; font-weight: 750; letter-spacing: -.02em; background: linear-gradient(90deg, #0071e3, #7b4fe0); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  .livebadge { position: absolute; left: 120px; top: 64px; display: inline-flex; align-items: center; gap: 10px; padding: 9px 18px; border-radius: 999px; background: rgba(229,56,59,.10); color: #b3261e; font-size: 17px; font-weight: 700; letter-spacing: .16em; }
+  .livebadge i { width: 11px; height: 11px; border-radius: 50%; background: #e5383b; box-shadow: 0 0 0 5px rgba(229,56,59,.18); }
+  .livettl { position: absolute; left: 120px; top: 112px; font-size: 58px; font-weight: 700; letter-spacing: -.035em; color: #0b1220; }
+  .livecard { position: absolute; border-radius: 22px; background: #fff; border: 1px solid rgba(16,28,72,.08); box-shadow: 0 70px 120px -34px rgba(16,28,72,.34), 0 26px 46px -26px rgba(16,28,72,.24); }
+  .livesteps { position: absolute; left: 120px; top: 330px; width: 800px; display: flex; flex-direction: column; gap: 22px; }
+  .livestep { display: flex; align-items: center; gap: 22px; font-size: 36px; font-weight: 600; letter-spacing: -.02em; color: #0b1220; }
+  .livestep span { width: 58px; height: 58px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: 26px; font-weight: 750; background: #e9eef7; color: #44546f; flex: none; }
+  .livestep.on span { background: linear-gradient(180deg, #2b8cff, #0058c9); color: #fff; box-shadow: 0 12px 22px -8px rgba(0,88,201,.55); }
 </style>
 </head>
 <body>
@@ -463,6 +471,12 @@
 
 
 
+<section class="scene" id="live">
+  <div class="livebadge"><i></i><span id="lv-badge">LIVE IN JIRA · REAL RECORDING</span></div>
+  <div class="livettl" id="lv-ttl"></div>
+  <div class="livecard" id="lv-card"></div>
+  <div class="livesteps" id="lv-steps"></div>
+</section>
 <div class="brand" id="brand"><b>Preflight</b>privacy review for Jira</div>
 <script>
 const $ = (id) => document.getElementById(id);
@@ -504,8 +518,27 @@ const CUES = {
   payoff: [['pop', 1.2], ['pop', 2.0], ['pop', 2.8], ['pop', 3.6], ['pop', 4.4], ['hit', 7.6], ['whoosh', 9.2], ['tick', 9.6], ['tick', 9.9], ['tick', 10.2], ['tick', 10.5], ['tick', 10.8], ['success', 11.2]],
   policy: [['pop', 2.6], ['pop', 3.6], ['pop', 5.3], ['pop', 8.4], ['click', 10.2], ['chime', 10.4]],
   end: [['chime', 0.5]],
+  hook: [['deny', 0.5]], live_blocked: [['whoosh', 1.2], ['deny', 5.2]], live_rovo: [['pop', 0.5], ['tick', 2.0], ['pop', 6.0], ['click', 11.5], ['success', 12.2]],
+  live_inbox: [['pop', 0.5]], live_approve: [['click', 1.1], ['click', 4.2], ['success', 4.6]],
 };
-const SCENE_EL = { takeoff: 'blocked' };
+const SCENE_EL = { takeoff: 'blocked', hook: 'live', live_blocked: 'live', live_rovo: 'live', live_inbox: 'live', live_approve: 'live' };
+// Real screen recordings: the page draws the frame and the labels; the build drops the footage into the frame.
+const LIVE = {
+  hook: { ttl: 'Jira just refused to start a ticket.' },
+  live_blocked: { ttl: 'The move to In Progress is refused.' },
+  live_rovo: { ttl: 'The Rovo agent drafts.', steps: [['Ask the Preflight agent', 0], ['It checks the ticket and drafts an answer', 0.09], ['It asks before saving a draft', 0.39], ['In the ticket: Use draft', 0.75]] },
+  live_inbox: { ttl: 'One inbox for approvers.' },
+  live_approve: { ttl: 'The sign-off.', steps: [['Save the answers', 0], ['Approve unlocks', 0.28], ['Signed off: name, date and time', 0.6]] },
+};
+function drawLive(id, lt, d, clip) {
+  const cfg = LIVE[id]; const g = clip || { w: 1560, x: 180, y: 215 };
+  const h = Math.round(g.w * (cfg.steps ? 836 / 880 : 872 / 1918));
+  $('lv-ttl').textContent = cfg.ttl; rise($('lv-ttl'), lt, 0.1, 0.6, 16);
+  const c = $('lv-card'); c.style.left = `${g.x - 12}px`; c.style.top = `${g.y - 12}px`; c.style.width = `${g.w + 24}px`; c.style.height = `${h + 24}px`;
+  const p = out(seg(lt, 0.05, 0.5)); c.style.opacity = p; c.style.transform = `scale(${lerp(0.97, 1, p)})`;
+  const f = clamp((lt - 0.45) / Math.max(d - 0.9, 0.1));
+  $('lv-steps').innerHTML = (cfg.steps || []).map(([t, at], i) => `<div class="livestep${f >= at ? ' on' : ''}" style="opacity:${f >= at ? 1 : 0.35}"><span>${i + 1}</span>${t}</div>`).join('');
+}
 const DARK = new Set(['storm', 'stakes', 'rewind']);
 const GROUND = 780;
 
@@ -688,6 +721,7 @@ window.render = function render(t) {
   el.style.opacity = fade;
   el.style.transform = `translateY(${(1 - out(seg(lt, 0, 0.7))) * 14}px) scale(${lerp(1.0, 1.035, lt / d)})`; el.style.transformOrigin = '50% 58%';
   // Scenes are animated on their own clock (native seconds) and fitted to the narration's length.
+  if (LIVE[active.id]) { el.style.transform = ''; drawLive(active.id, lt, d, active.clip); return; }
   const k = (active.native || d) / d;
   draw[active.id](lt * k, d * k);
 };
