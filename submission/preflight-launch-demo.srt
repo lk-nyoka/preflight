@@ -1,0 +1,247 @@
+1
+00:00:03,000 --> 00:00:05,460
+Jira just refused to start this ticket.
+
+2
+00:00:06,000 --> 00:00:07,253
+That's not a bug.
+
+3
+00:00:07,400 --> 00:00:09,094
+It's a pre-flight check.
+
+4
+00:00:09,760 --> 00:00:12,638
+Every flight gets a check before it leaves the gate.
+
+5
+00:00:13,460 --> 00:00:14,597
+Software doesn't.
+
+6
+00:00:14,960 --> 00:00:17,915
+Written Tuesday. Shipped Thursday.
+
+7
+00:00:17,985 --> 00:00:19,935
+Nobody checks what's on board.
+
+8
+00:00:20,700 --> 00:00:23,276
+Months later, a complaint lands.
+
+9
+00:00:23,346 --> 00:00:27,700
+Customer ID numbers. No reason. No end date.
+
+10
+00:00:27,771 --> 00:00:29,186
+And one question.
+
+11
+00:00:29,256 --> 00:00:30,532
+Who approved this?
+
+12
+00:00:30,900 --> 00:00:33,140
+Regulators are already fining.
+
+13
+00:00:33,210 --> 00:00:34,591
+One million rand.
+
+14
+00:00:34,660 --> 00:00:35,820
+Half a million.
+
+15
+00:00:35,891 --> 00:00:37,701
+Up to ten years in prison.
+
+16
+00:00:39,170 --> 00:00:39,982
+Preflight.
+
+17
+00:00:40,570 --> 00:00:42,787
+Privacy review, before you build.
+
+18
+00:00:45,470 --> 00:00:47,589
+Step one. The scanner.
+
+19
+00:00:47,659 --> 00:00:49,968
+It reads every ticket as it's written.
+
+20
+00:00:50,270 --> 00:00:51,685
+Title and description.
+
+21
+00:00:52,270 --> 00:00:56,682
+ID numbers. Health details. Children's data.
+
+22
+00:00:57,470 --> 00:00:59,275
+Step two. The gate.
+
+23
+00:00:59,370 --> 00:01:02,975
+Personal data on board? The gate stays closed.
+
+24
+00:01:03,270 --> 00:01:04,709
+Here it is in Jira.
+
+25
+00:01:04,870 --> 00:01:06,553
+Drag to In Progress.
+
+26
+00:01:06,970 --> 00:01:07,898
+Refused.
+
+27
+00:01:08,270 --> 00:01:10,034
+With exactly what's missing.
+
+28
+00:01:10,104 --> 00:01:14,307
+Why you need it. Your lawful basis. When it's deleted.
+
+29
+00:01:15,080 --> 00:01:17,384
+Step three. Your co-pilot.
+
+30
+00:01:17,454 --> 00:01:19,798
+Ask the Preflight agent in Rovo.
+
+31
+00:01:19,869 --> 00:01:21,284
+It checks the ticket.
+
+32
+00:01:21,880 --> 00:01:23,481
+It drafts the answer.
+
+33
+00:01:24,280 --> 00:01:26,636
+Then it asks before saving anything.
+
+34
+00:01:27,480 --> 00:01:30,672
+The draft counts only when a person clicks Use draft.
+
+35
+00:01:32,080 --> 00:01:33,310
+AI can help.
+
+36
+00:01:33,780 --> 00:01:35,161
+It can't approve.
+
+37
+00:01:37,680 --> 00:01:40,054
+Step four. The control tower.
+
+38
+00:01:40,124 --> 00:01:43,176
+Approvers see every waiting ticket in one inbox.
+
+39
+00:01:44,080 --> 00:01:46,691
+Save the answers, and Approve unlocks.
+
+40
+00:01:47,480 --> 00:01:48,512
+One click.
+
+41
+00:01:48,880 --> 00:01:51,805
+Name, date and time, on the record.
+
+42
+00:01:52,680 --> 00:01:54,996
+Gate open. Cleared to build.
+
+43
+00:01:57,080 --> 00:01:59,215
+Now, try to sneak past.
+
+44
+00:01:59,285 --> 00:02:00,619
+Reword the ticket.
+
+45
+00:02:01,280 --> 00:02:02,394
+Still flagged.
+
+46
+00:02:03,680 --> 00:02:05,711
+Change an answer after sign-off.
+
+47
+00:02:06,580 --> 00:02:07,833
+Clearance cancelled.
+
+48
+00:02:08,480 --> 00:02:10,313
+It needs a new sign-off.
+
+49
+00:02:11,080 --> 00:02:13,651
+Step five. The landing check.
+
+50
+00:02:13,721 --> 00:02:16,007
+Before Done, one more proof.
+
+51
+00:02:16,078 --> 00:02:18,771
+A link to the updated privacy notice.
+
+52
+00:02:20,680 --> 00:02:23,291
+Every answer goes into the flight recorder.
+
+53
+00:02:23,580 --> 00:02:24,670
+Write-once.
+
+54
+00:02:25,180 --> 00:02:26,259
+So ask again.
+
+55
+00:02:26,580 --> 00:02:27,856
+Who approved this?
+
+56
+00:02:28,880 --> 00:02:30,052
+It's on the record.
+
+57
+00:02:31,880 --> 00:02:33,481
+The checklist is yours.
+
+58
+00:02:33,780 --> 00:02:36,182
+Start with POPIA or GDPR.
+
+59
+00:02:36,252 --> 00:02:39,572
+Or let Rovo draft rules from your own policy.
+
+60
+00:02:39,642 --> 00:02:42,834
+Nothing is enforced until an approver switches it on.
+
+61
+00:02:44,100 --> 00:02:44,912
+Preflight.
+
+62
+00:02:45,500 --> 00:02:47,717
+Privacy review, before you build.

@@ -1,0 +1,266 @@
+# Devpost submission sheet — Preflight (Codegeist 2026)
+
+Everything below is ready to paste, field by field, in the order Devpost asks for it.
+Only three fields are left blank: they are yours to answer in your own words and are
+marked `>>> YOUR WORDS <<<`.
+
+Video: https://youtu.be/kvaGZFoxu_Q (2:50)
+Repo: https://github.com/lk-nyoka/preflight (public)
+App ID: `ari:cloud:ecosystem::app/e9581f7b-84df-42b6-a25d-0cfb7c31f886`
+
+---
+
+## 1. Project name (60 max)
+
+```
+Preflight: privacy review before build, in Jira
+```
+
+## 2. Elevator pitch (200 max)
+
+```
+Preflight puts your privacy policy in front of the work: Jira holds a ticket that changes personal data until the review is answered and your Information Officer signs off, before a line is built.
+```
+
+---
+
+## 3. About the project
+
+Paste everything between the lines into the "About the project" editor.
+
+---8<---
+
+## Inspiration
+
+In South Africa every organisation that handles personal information falls under POPIA and has to appoint an Information Officer. In practice the privacy policy lives in a PDF or a Confluence page, and the work that changes how personal data is collected, stored or shared lives in Jira. Nothing connects the two. A ticket like "add the customer's ID number to signup" can be built, reviewed and shipped without anyone asking why the ID number is needed, how long it is kept, or whether the Information Officer has seen it.
+
+The cost of that gap is now real. In October 2026 South Africa's Information Regulator announced a R1 million fine for a major bank and a R500,000 fine for a college that shared personal information without a lawful reason. When a complaint arrives, the first question is always "who approved this?", and if the decision was made in a Jira ticket nobody can answer it.
+
+Existing tools don't close that gap. Privacy scanners find personal data *after* it is already in Jira. Checklist apps can block Done, but only if someone remembered to add the right checklist, and by the time a ticket is closed the field has already shipped. I wanted the policy to show up at the moment it matters: when someone starts building.
+
+## What it does
+
+Preflight is a Forge app for Jira that turns an organisation's privacy review into two gates.
+
+- **Review before build.** When a work item proposes a change to how personal information is collected, used, stored or shared, moving it to *In Progress* is refused until the team answers the review questions your policy requires (purpose, why less data won't do, lawful basis, retention) and a **named approver** signs off.
+- **Evidence before Done.** Moving it to *Done* is refused until the ship-time evidence is recorded, such as the updated privacy notice.
+- **It knows which review applies.** A deterministic, stem-aware rules engine reads the ticket and shows exactly why a rule matched ("mentions 'SA ID number'"). Rewording the ticket doesn't make a review disappear; only an approver can dismiss a rule, with a reason.
+- **The panel says what to do next and who approves.** Questions are grouped *before work starts* and *before Done*.
+- **An inbox for the Information Officer.** *Preflight reviews* lists everything waiting for approval and everything waiting on the team.
+- **Rovo helps, humans decide.** The Preflight agent explains the gaps and drafts answers with the developer, but a draft only counts after the person confirms it in the panel. The agent can never approve, dismiss, grant exceptions, activate rules, or declare that a change has no personal data.
+- **Rules come from your policy.** Admins give the agent their policy text (pasted, or a page shared in the Rovo chat) and it proposes **draft** rules, with example tickets that must and must not match. Nothing is enforced until it is activated.
+- **Answers have to be real.** "TBD", "not sure" and keyboard filler are rejected, and a retention answer has to say when the data goes.
+- **Governance built in.** Once approvers are named, a Jira admin can't approve, can't add themselves as approver, and an admin's changes to active rules become proposals. The approver sees every changed field, with anything that weakens the rule flagged first and the rule's examples re-run against the new version. Weakening a setting needs an approver, a break-glass reset needs a second admin and 72 hours, and bulk actions can't switch enforcement off.
+- **Bypasses are caught.** Work that reaches In Progress or Done another way (moved from another project, changed type, a workflow without the gate) is flagged to the approvers in a comment and in the inbox.
+- **It keeps the privacy rules itself.** Preflight reports the Atlassian account IDs it stores to Atlassian's personal data reporting API every week and anonymises closed accounts everywhere, even in the audit history.
+- **A write-once audit history** of every answer, approval, rule change, setting change and bypass, plus a coverage check that lists workflow transitions without a gate.
+
+It ships with two editable starter packs, **POPIA (South Africa)** and **GDPR (EU / EEA)**, each with seven rules: identifying numbers, contact details and location, special categories, children, electronic direct marketing, cross-border transfers and bulk exports. The GDPR pack knows that hosting in Ireland is not a transfer but hosting in South Africa is. Neither is a complete legal assessment; they are starting points for an Information Officer or DPO to adapt. The engine is regulation-agnostic, so HIPAA or an internal policy is a new pack, not new code.
+
+Preflight enforces your organisation's own review process. It never says work is "compliant" and it is not legal advice.
+
+## How I built it
+
+- **Forge** with UI Kit for the issue panel, the admin page and a global *Preflight reviews* page; two `jira:workflowValidator` modules (enabled for company-managed and team-managed projects); product triggers for create, update and delete; a `jira:entityProperty` for JQL; and the Forge Key-Value Store.
+- **One deterministic engine** (`src/engine/evaluate.js`) powers both gates, the panel, the Rovo actions and the MCP tools, so they can never disagree. No LLM sits in the enforcement path: a blocking validator has to be fast, explainable and free to run.
+- **Matching that respects Jira, measured honestly.** Stem-aware phrases, context triggers ("GPS" only counts with "track" or "driver"), excludes for Jira idioms ("race condition", "child issue", "health check endpoint"), per-rule examples checked on every save, and a regression corpus of about 245 realistic tickets. Three blind tests (titles written by a reviewer who hadn't seen the rules) caught 68%, 63% and 70% of privacy tickets with at most 1 false alarm in 40; each round's misses were fixed. Keywords will always miss some wording, which is why there is also a Yes / No / Unsure declaration step.
+- **Rovo agent** (`rovo:agent` with seven `action` modules) and **`rovo:mcp`** exposing the read-only check and rule tools plus a rate-limited approval request to coding agents.
+- **Trust engineering on KVS.** Audit events are separate keys written with `FAIL_IF_EXISTS`, so history can't be rewritten through the app. Record updates run under a per-ticket lock (a `FAIL_IF_EXISTS` key with a TTL) so concurrent saves don't overwrite each other. Approvals carry a fingerprint of the answers they approved and go stale if those answers or the rule change. Evidence is deleted with its ticket.
+- **Permissions are checked server-side** in every resolver and action. The panel always takes the issue from Jira's context, never from the request.
+- **84 automated tests** cover the engine, the matcher corpus and end-to-end flows with Jira and storage faked, plus regression tests for the holes found by three independent reviews of the code (for example: an admin hiding a weakened rule from the approver, overriding someone else's "Yes" in two steps, or an approval surviving a rule change).
+
+## Challenges
+
+- **Making a gate people won't hate.** My first matcher blocked "Promo code bug" and "race condition" tickets and missed "ID numbers" because of the plural. I rebuilt it with stemming, context triggers and excludes, then tested it on tickets it had never seen. It now ships with a regression corpus so it can't quietly get worse.
+- **Putting the gate in the right place.** Blocking *Done* is too late: the code has shipped. The real value is a review before build, with only proof-of-delivery checked at Done.
+- **Deciding where AI belongs.** It would be easy to let an LLM decide whether a ticket is "POPIA compliant". That would be slow, unexplainable and legally dangerous. AI drafts and explains; deterministic rules and humans decide.
+- **Governing the governors.** A privacy control is only as strong as whoever can switch it off. I had independent reviews attack the code; they found ways for an admin to weaken a rule without the approver noticing and for a user to undo someone else's declaration. Each is now fixed and has a regression test.
+- **Getting the law right.** Each rule lists the POPIA sections it draws on, and I kept the distinctions the Act makes: an ID number is ordinary personal information (s1), not special personal information under s26. It is still a starter pack for an Information Officer to adapt, not legal advice.
+- Jira refuses an app's ticket creation unless the space's permission scheme grants the hidden `atlassian-addons-project-access` role, so "Load demo" now explains exactly which permission to fix instead of failing with a bare 403.
+- On Windows, `npm install` failed because the Forge CLI (then a project dev dependency) compiles a native module that breaks on folder paths with spaces. The CLI now only lives globally.
+
+## What I learned
+
+- How Forge validators, triggers, entity properties, KVS key policies and TTLs, Rovo actions and `rovo:mcp` fit together into one product.
+- That trust features (stale approvals, sticky matches, write-once audit, governance) matter more in a compliance tool than clever AI.
+- >>> YOUR WORDS <<< One or two lines: what deploying and testing on a real Jira site taught you that the automated tests did not.
+
+## What's next
+
+- JSM support for data-subject access requests (POPIA s23, GDPR Art 15), and more starter packs beyond POPIA and GDPR.
+- Watching a Confluence policy page and proposing rule changes when the policy changes.
+- A Marketplace listing for South African teams.
+
+---8<---
+
+---
+
+## 4. Built with (tags)
+
+```
+forge, atlassian-forge, jira, jira-cloud, rovo, rovo-agents, mcp, forge-ui-kit, forge-kvs, react, javascript, node.js, popia, privacy, governance
+```
+
+## 5. "Try it out" links
+
+```
+https://github.com/lk-nyoka/preflight
+https://youtu.be/kvaGZFoxu_Q
+```
+
+## 6. Demo video URL
+
+```
+https://youtu.be/kvaGZFoxu_Q
+```
+
+Check before you submit: the video must be **Public** (not Unlisted) on YouTube, and it
+must be the 2:50 launch cut.
+
+## 7. Installation link (required)
+
+```
+https://developer.atlassian.com/console/install/e9581f7b-84df-42b6-a25d-0cfb7c31f886?signature=AYABeM%2BMkkX%2FCaON50xGitY%2BkicAAAADAAdhd3Mta21zAEthcm46YXdzOmttczp1cy13ZXN0LTI6NzA5NTg3ODM1MjQzOmtleS83MDVlZDY3MC1mNTdjLTQxYjUtOWY5Yi1lM2YyZGNjMTQ2ZTcAuAECAQB4CxqLTo9l4lqXuFjNim1xJM%2Bp%2F3TVP9xHS2BrU5DRRucBCMZ%2BovKO5SgebI9IJqb9yAAAAH4wfAYJKoZIhvcNAQcGoG8wbQIBADBoBgkqhkiG9w0BBwEwHgYJYIZIAWUDBAEuMBEEDAm2%2F3NEvqkd3jfdbwIBEIA7Fqe2o8YBa4y%2F5ddq%2Fbd2ehoZ8IsNk%2FMYu%2Bm9n1RJYjYNM0hri1Vcex1kd9pWfpZcyfzpz8%2BIGFIP%2BXwAB2F3cy1rbXMAS2Fybjphd3M6a21zOmV1LXdlc3QtMTo3MDk1ODc4MzUyNDM6a2V5LzQ2MzBjZTZiLTAwYzMtNGRlMi04NzdiLTYyN2UyMDYwZTVjYwC4AQICAHi9bVMAkme4qVQX1fQHo6ePw3H40A7cGfz7yrmSfBWMXgHtoMIT%2Bqm1cwVEJ47KXnC2AAAAfjB8BgkqhkiG9w0BBwagbzBtAgEAMGgGCSqGSIb3DQEHATAeBglghkgBZQMEAS4wEQQMuTY1uxKJzX0GN1MNAgEQgDvwI8L2YftJO9zEoFQgo2EJ%2F2Cv9NNNqKrhHyww3yFsWdyTveBozBrrFycFkn48y%2Fu0ZDtXc81s70iYlQAHYXdzLWttcwBLYXJuOmF3czprbXM6dXMtZWFzdC0xOjcwOTU4NzgzNTI0MzprZXkvNmMxMjBiYTAtNGNkNS00OTg1LWI4MmUtNDBhMDQ5NTJjYzU3ALgBAgIAeDYASx0XCjkny4iLV6vz%2BKtEGSGT6kdt0QRpkn6D%2FlVEAdrxsdza%2FxyQmMBQ83VlHB0AAAB%2BMHwGCSqGSIb3DQEHBqBvMG0CAQAwaAYJKoZIhvcNAQcBMB4GCWCGSAFlAwQBLjARBAx9azf6cQ2rEWdjBmgCARCAO%2F3%2FlvJ8EpTZTZpPG7KiOeGNAzlWZrB8N9oBkV1IGvXwI1L%2FIGYo9kb4feOwO2MVZ0C4HquIOlGAeJwoAgAAAAAMAAAQAAAAAAAAAAAAAAAAAKnpoG31uy3yYMtYAGy6V3D%2F%2F%2F%2F%2FAAAAAQAAAAAAAAAAAAAAAQAAADK%2BVdoXbTEKw74LwjIlNODyu8uKS3PPKR9Tp7ihDMRnpUM5%2B0zHiUuXoh1KMwdgf%2Bs8YquSpsh4XaUppe%2BAQdF4Ddo%3D&product=jira
+```
+
+Before pasting it: run `forge deploy -e production` and open this link yourself in a
+private window. Stage 1 is pass/fail on whether a judge can install from this link and
+see the app work as the video shows.
+
+## 8. App ID (required)
+
+```
+ari:cloud:ecosystem::app/e9581f7b-84df-42b6-a25d-0cfb7c31f886
+```
+
+## 9. Testing instructions
+
+```
+Full guide: https://github.com/lk-nyoka/preflight/blob/main/docs/JUDGES.md
+
+1. Install with the link above on a Jira site where you are a Jira admin.
+2. Create a Kanban space and choose Company-managed (team-managed is not verified). Note its key, e.g. PRIV.
+   Jira settings → Apps → Preflight → Setup → choose POPIA → enter the key → Load demo.
+   This activates the POPIA starter rules and creates 5 sample work items. If it reports a permission
+   problem, the message names the role to add under Space settings → Permissions.
+3. Attach the gates (one time): Jira settings → Work items → Workflows → edit the space's workflow, add
+   "Preflight: privacy review before build" to the transition into In Progress and
+   "Preflight: privacy evidence before Done" to the transition into Done. Publish.
+   Setup → Check workflow coverage should show both as protected.
+4. Open "Add SA ID number field to customer signup" and drag it to In Progress: refused.
+5. Click the Preflight (hexagon) icon under the title to open the panel. Answer the 4 questions → Save answers →
+   Approve (with no approvers named, a Jira admin can approve) → drag to In Progress: it moves.
+6. Drag to Done: refused until "Privacy notice updated (link)" is filled in.
+7. Edit an approved answer: the approval goes stale and the gate closes again.
+8. Apps → Preflight reviews shows the approver's inbox.
+9. Optional, on a site with Rovo: Ask Rovo → Agents → Preflight: "Check PRIV-1 and draft an answer for the purpose question".
+   Say yes, then click Use draft in the panel.
+No external services or credentials are needed.
+```
+
+## 10. How the project meets the main technology requirement
+
+```
+Preflight is built entirely on Atlassian Forge (Node.js runtime, UI Kit, Forge Key-Value Store) and integrates with:
+
+Jira: an issue panel shows the review and collects evidence; two jira:workflowValidator modules hold the transitions into In Progress and Done (company-managed and team-managed projects); product triggers re-evaluate work items on create and update and delete evidence on delete; a global page is the approver's inbox; a jira:entityProperty makes the status searchable in JQL; an admin page manages rules, testing, demo data, approvers, coverage and the audit log; comments notify approvers; the workflow APIs power the coverage check.
+
+Rovo: a rovo:agent named Preflight with seven action modules (check a work item, list rules, propose an answer, request approval, flag a missed rule, record a yes/unsure declaration, draft a rule from a policy page). Server-side checks stop it from approving or making a draft count.
+
+Rovo MCP (rovo:mcp): exposes the check, list-rules and request-approval actions as MCP tools for external coding agents.
+```
+
+## 11. Category
+
+```
+Apps for Business Teams
+```
+
+## 12. Why this track
+
+```
+The Business Teams category explicitly covers legal and compliance work, and privacy review is exactly that. Information Officers and privacy teams (a role POPIA requires every South African organisation to have) need the right information in front of them and a say before work ships. Preflight puts their policy on the ticket, gives them an inbox and the sign-off, and governs who can change the rules. POPIA applies to every industry, so this is a business function rather than one sector, and the engine is regulation-agnostic.
+```
+
+## 13. Bonus prize
+
+```
+Best Agents - Rovo/Assignable agents
+```
+
+## 14. Experience building with Forge
+
+```
+What worked well: UI Kit let me build three full interfaces without a frontend build. Workflow validators are what make Preflight a gate rather than a dashboard. KVS key policies were a pleasant surprise: FAIL_IF_EXISTS gave me both a write-once audit log and a lock with a TTL. Rovo actions were straightforward to define, and reusing them as MCP tools through rovo:mcp was almost free.
+
+What I struggled with: Workflow rules default to company-managed projects only, and attaching a validator is still a manual step in the workflow editor, so I built a coverage check to show where the gates are missing. Several modules I rely on (workflow validators, rovo:mcp) are in Preview. forge lint needs a logged-in account, which made validating in a fresh environment harder. On a real site the build gate refused the first move with the approver's name in the message, exactly as designed, and let it through once the answers were approved.
+
+What I'd improve: An API to attach an app's validator to a workflow programmatically (one-click onboarding), a local emulator for validators and triggers, and clearer documentation of the context a Rovo action receives (issue key, principal).
+```
+
+## 15. AI tools used
+
+```
+Claude (Anthropic) for planning, research on Forge modules and POPIA sections, writing code and tests, independent review of the code, and drafting documentation, and producing the demo film (animation code, generated music and sound effects, and a synthetic narration voice from the open-source Piper model).
+```
+
+Add any others you used (Kiro, Copilot, Antigravity, Codex) before you paste.
+
+## 16. How much did this hackathon help you develop new skills?
+
+```
+>>> YOUR WORDS <<<   (suggested: A lot)
+```
+
+## 17. How likely are you to use Forge / Atlassian products again?
+
+```
+>>> YOUR WORDS <<<
+```
+
+---
+
+## 18. Image gallery
+
+Devpost: JPG/PNG/GIF, 5 MB max each, 3:2 ratio works best, up to 15 images.
+All of these are in `submission/gallery/`, already 3:2 and well under 5 MB.
+
+Upload as the **thumbnail** first:
+
+| File | Use |
+|---|---|
+| `00-thumbnail-devpost-3x2.jpg` | Thumbnail (1500 × 1000) |
+
+Then the gallery, in this order (1800 × 1200 each):
+
+| # | File | What it shows |
+|---|---|---|
+| 1 | `01-refused.jpg` | The move to In Progress refused, with the approver named — real recording |
+| 2 | `02-whats-missing.jpg` | The panel listing what the review still needs |
+| 3 | `03-rovo-draft.jpg` | The Rovo agent drafting an answer — real recording |
+| 4 | `04-principle.jpg` | AI can help, it can't approve |
+| 5 | `05-inbox.jpg` | The Information Officer's inbox — real recording |
+| 6 | `06-signed-off.jpg` | Signed off, and the ticket moves — real recording |
+| 7 | `07-scanner.jpg` | The rules engine showing why a rule matched |
+| 8 | `08-no-sneaking.jpg` | Bypass detection: the other way round is flagged |
+| 9 | `09-checklist.jpg` | The write-once audit history |
+
+Each image is tagged either "REAL RECORDING" or "ILLUSTRATION" in its corner, so nothing
+claims to be live screen capture when it isn't.
+
+`youtube-thumbnail-16x9.jpg` (1280 × 720) is for the YouTube custom thumbnail, not Devpost.
+
+---
+
+## Before you hit submit
+
+1. `forge deploy` then `forge deploy -e production` from this folder.
+2. Open the installation link in a private window and install it on a clean site; walk
+   steps 4–6 of the testing instructions. This is the Stage 1 pass/fail check.
+3. Set the YouTube video to **Public** and confirm it is the 2:50 cut.
+4. Paste every field above; fill the three `>>> YOUR WORDS <<<` fields.
+5. Upload `00-thumbnail-devpost-3x2.jpg` as the thumbnail and the nine gallery images.
+6. Two claims in the writing rest on outside facts — verify them against their sources
+   before you submit, or cut them: the October 2026 Information Regulator fines
+   (R1 million and R500,000), and the claim in the film that Rovo drafts rules from your
+   own policy, which is worth testing once on the demo site so you've seen it work.
