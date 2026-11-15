@@ -61,3 +61,7 @@ video/build/
 .env.txt
 *.tar.gz
 *.tar.gz.old
+
+video/launch/footage/
+video/launch/build/
+video/recordings/_work/

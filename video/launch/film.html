@@ -1,0 +1,837 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Preflight film</title>
+<style>
+  :root {
+    --bg: #f5f5f7; --ink: #1d1d1f; --muted: #6e6e73; --line: #e5e5ea; --card: #ffffff;
+    --blue: #0071e3; --red: #e5383b; --green: #1f9d55; --amber: #b25e09; --amberbg: #fff4e5;
+    --purple: #7b4fe0; --purplebg: #f3eeff; --shadow: 0 40px 100px rgba(0,0,0,.10), 0 8px 24px rgba(0,0,0,.06);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { width: 1920px; height: 1080px; overflow: hidden; background: var(--bg); }
+  body { font-family: 'Inter Display', 'Inter', sans-serif; color: var(--ink); -webkit-font-smoothing: antialiased; }
+  .scene { position: absolute; inset: 0; opacity: 0; will-change: transform, opacity; }
+  .center { display: flex; flex-direction: column; align-items: center; justify-content: center; }
+  .big { font-size: 96px; font-weight: 600; letter-spacing: -0.035em; line-height: 1.05; text-align: center; }
+  .mid { font-size: 56px; font-weight: 600; letter-spacing: -0.03em; line-height: 1.1; text-align: center; }
+  .sub { font-size: 32px; color: var(--muted); font-weight: 500; letter-spacing: -0.01em; text-align: center; }
+  .grad { background: linear-gradient(90deg, #0071e3, #7b4fe0 60%, #c2378f); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  .window { position: absolute; background: var(--card); border-radius: 22px; box-shadow: var(--shadow); overflow: hidden; }
+  .chrome { height: 46px; border-bottom: 1px solid var(--line); display: flex; align-items: center; padding: 0 18px; gap: 8px; font-size: 18px; color: var(--muted); }
+  .dot { width: 12px; height: 12px; border-radius: 50%; background: #e3e3e8; }
+  .issuecard { background: #fff; border-radius: 14px; border: 1px solid var(--line); padding: 20px 22px; box-shadow: 0 6px 18px rgba(0,0,0,.06); font-size: 22px; line-height: 1.35; }
+  .issuecard .key { font-size: 16px; color: var(--muted); font-weight: 600; margin-top: 14px; display: flex; align-items: center; gap: 10px; }
+  .avatar { width: 30px; height: 30px; border-radius: 50%; background: #d9e7ff; color: #0b4fae; font-size: 13px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; }
+  .avatar.io { background: #e6f6ec; color: #136c3a; }
+  .col { position: absolute; top: 120px; width: 470px; height: 760px; background: #f1f2f4; border-radius: 16px; padding: 20px; }
+  .col h4 { font-size: 16px; letter-spacing: .06em; color: var(--muted); font-weight: 700; margin-bottom: 16px; }
+  .loz { display: inline-block; padding: 4px 10px; border-radius: 6px; font-size: 15px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
+  .loz.red { background: #ffe7e7; color: #ae2a19; } .loz.green { background: #dcfff1; color: #216e4e; }
+  .loz.grey { background: #ebecf0; color: #44546f; } .loz.purple { background: var(--purplebg); color: var(--purple); }
+  .loz.blue { background: #e9f2ff; color: #0055cc; } .loz.amber { background: var(--amberbg); color: var(--amber); }
+  .flag { position: absolute; width: 640px; background: #fff; border-radius: 16px; box-shadow: var(--shadow); padding: 24px 26px; font-size: 20px; line-height: 1.45; border-left: 6px solid var(--red); }
+  .flag b { display: block; font-size: 22px; margin-bottom: 6px; }
+  .panel { position: absolute; padding: 26px 28px; font-size: 20px; line-height: 1.45; }
+  .panel h3 { font-size: 24px; letter-spacing: -0.01em; display: flex; align-items: center; gap: 12px; }
+  .box { border-radius: 14px; padding: 18px 20px; margin-top: 18px; }
+  .box.warn { background: #fff7e6; border: 1px solid #ffe0a3; } .box.info { background: #eef4ff; border: 1px solid #cfe0ff; }
+  .box.ok { background: #e9fbf1; border: 1px solid #b8ecd0; } .box.draft { background: var(--purplebg); border: 1px solid #ddd0fb; }
+  .rule { border-radius: 14px; background: #f7f8fa; padding: 20px; margin-top: 18px; }
+  .field { margin-top: 12px; } .field label { font-size: 17px; font-weight: 600; color: #44546f; display: block; margin-bottom: 6px; }
+  .input { min-height: 46px; border: 2px solid #dfe1e6; border-radius: 10px; padding: 9px 12px; font-size: 19px; background: #fff; }
+  .btn { display: inline-flex; align-items: center; padding: 10px 18px; border-radius: 10px; font-size: 18px; font-weight: 600; background: #f1f2f4; color: #172b4d; }
+  .btn.primary { background: var(--blue); color: #fff; } .btn.rovo { background: var(--purple); color: #fff; }
+  .tag { display: inline-block; padding: 3px 10px; border-radius: 6px; background: #ebecf0; font-size: 15px; font-weight: 600; color: #44546f; }
+  .ring { position: absolute; border: 4px solid var(--blue); border-radius: 18px; box-shadow: 0 0 0 10px rgba(0,113,227,.12); pointer-events: none; opacity: 0; }
+  .cursor { position: absolute; left: 0; top: 0; width: 34px; height: 34px; z-index: 50; pointer-events: none; }
+  .bubble { position: absolute; max-width: 520px; padding: 16px 20px; border-radius: 20px; font-size: 20px; line-height: 1.45; }
+  .bubble.me { background: var(--blue); color: #fff; border-bottom-right-radius: 6px; }
+  .bubble.ai { background: #fff; border: 1px solid var(--line); border-bottom-left-radius: 6px; }
+  table { border-collapse: collapse; width: 100%; font-size: 20px; } td, th { text-align: left; padding: 14px 12px; border-bottom: 1px solid var(--line); }
+  th { color: var(--muted); font-size: 15px; letter-spacing: .05em; text-transform: uppercase; }
+  .chip { position: absolute; padding: 14px 24px; border-radius: 999px; background: #fff; box-shadow: var(--shadow); font-size: 26px; font-weight: 600; }
+  .mark { background: #fff2a8; border-radius: 4px; padding: 0 3px; }
+  .caret { display: inline-block; width: 2px; height: 1.05em; background: var(--blue); vertical-align: -0.15em; }
+  .dark { background: #050507; color: #f5f5f7; }
+  .eyebrow { font-size: 22px; letter-spacing: .22em; font-weight: 700; color: #ff6b6e; }
+  .letter { position: absolute; width: 800px; background: #fbfaf7; color: #1d1d1f; border-radius: 6px; padding: 46px 52px; font-size: 24px; line-height: 1.55;
+    box-shadow: 0 60px 120px rgba(0,0,0,.6); font-family: 'Inter', sans-serif; }
+  .letter.small { width: 560px; font-size: 20px; padding: 34px 38px; transform: rotate(-2deg); }
+  .lline { margin-top: 6px; }
+  .msg { position: absolute; width: 760px; background: #1c1c1f; border: 1px solid #2c2c30; border-radius: 18px; padding: 18px 24px; font-size: 26px; color: #f5f5f7; }
+  .msg .who { display: block; font-size: 16px; color: #8a8a8e; font-weight: 600; margin-bottom: 4px; letter-spacing: .02em; }
+  .dark-card { background: #1c1c1f; border-color: #2c2c30; color: #f5f5f7; }
+  .tl { position: absolute; left: 560px; font-size: 30px; color: #d2d2d7; display: flex; align-items: center; gap: 18px; }
+  .tl-dot { width: 14px; height: 14px; border-radius: 50%; background: #6e6e73; display: inline-block; }
+  .stat { position: absolute; top: 330px; width: 460px; text-align: center; }
+  .stat .num { font-size: 92px; font-weight: 700; letter-spacing: -.04em; color: #fff; }
+  .stat .cap { margin-top: 18px; font-size: 24px; color: #a1a1a6; line-height: 1.4; }
+  .rw-lines { position: absolute; inset: 0; background: repeating-linear-gradient(0deg, rgba(255,255,255,.05) 0 2px, transparent 2px 6px); opacity: 0; }
+  .rec { display: grid; grid-template-columns: 200px 1fr; gap: 20px; padding: 16px 0; border-bottom: 1px solid var(--line); margin-top: 6px; }
+  .rec span { color: var(--muted); font-size: 18px; font-weight: 600; padding-top: 3px; }
+  .rec b { font-weight: 600; display: flex; align-items: center; gap: 10px; }
+
+  svg.art { position: absolute; inset: 0; width: 1920px; height: 1080px; }
+  .step { position: absolute; left: 120px; top: 78px; font-size: 21px; letter-spacing: .2em; font-weight: 700; color: var(--blue); }
+  .ttl { position: absolute; left: 120px; top: 112px; font-size: 68px; font-weight: 650; letter-spacing: -.03em; line-height: 1.08; }
+  .legendwrap { position: absolute; left: 0; right: 0; top: 822px; display: flex; justify-content: center; }
+  .legend { background: #1d1d1f; color: #fff; border-radius: 999px; padding: 15px 30px; font-size: 25px; font-weight: 500; }
+  .legend b { color: #8ec5ff; font-weight: 700; margin-right: 8px; }
+  .clist { position: absolute; background: #fff; border-radius: 22px; box-shadow: var(--shadow); padding: 28px 32px; font-size: 27px; }
+  .clist h5 { font-size: 16px; letter-spacing: .12em; color: var(--muted); text-transform: uppercase; margin-bottom: 10px; }
+  .crow { display: flex; align-items: center; gap: 16px; padding: 10px 0; font-weight: 500; }
+  .cb { width: 32px; height: 32px; border-radius: 9px; border: 3px solid #c7ccd4; display: inline-flex; align-items: center; justify-content: center; font-size: 21px; font-weight: 800; color: #fff; flex: none; }
+  .cb.on { background: var(--green); border-color: var(--green); }
+  .pill { position: absolute; padding: 12px 22px; border-radius: 999px; background: #fff; box-shadow: 0 14px 40px rgba(0,0,0,.12); font-size: 24px; font-weight: 600; white-space: nowrap; }
+  .pill.red { background: #ffe7e7; color: #ae2a19; } .pill.green { background: #dcfff1; color: #216e4e; } .pill.dark { background: #1d1d1f; color: #fff; }
+  .name { position: absolute; padding: 8px 16px; border-radius: 10px; background: rgba(255,255,255,.92); font-size: 21px; font-weight: 600; box-shadow: 0 6px 18px rgba(0,0,0,.08); white-space: nowrap; }
+  .name small { color: var(--muted); font-weight: 500; font-size: 18px; margin-left: 6px; }
+  .stamp { position: absolute; border: 6px solid var(--green); color: var(--green); border-radius: 14px; padding: 8px 22px; font-size: 44px; font-weight: 800; letter-spacing: .08em; transform-origin: 50% 50%; background: rgba(255,255,255,.7); }
+  .toggle { width: 64px; height: 36px; border-radius: 999px; background: #d5d9e0; position: relative; flex: none; }
+  .toggle i { position: absolute; top: 4px; left: 4px; width: 28px; height: 28px; border-radius: 50%; background: #fff; box-shadow: 0 2px 6px rgba(0,0,0,.2); }
+  .toggle.on { background: var(--green); } .toggle.on i { left: 32px; }
+  .rain { position: absolute; inset: -200px; background: repeating-linear-gradient(105deg, rgba(180,200,255,.16) 0 2px, transparent 2px 46px); }
+
+  /* ===== Design system: "clear sky" — soft light, glass surfaces, deep layered shadows ===== */
+  html, body { background: #f4f6fb; }
+  .scene:not(.dark) { background: radial-gradient(1200px 760px at 12% -5%, #dfeaff 0%, rgba(223,234,255,0) 62%), radial-gradient(1100px 760px at 102% 104%, #efe6ff 0%, rgba(239,230,255,0) 60%), #f6f8fc; }
+  body::after { content: ''; position: fixed; inset: 0; z-index: 99; pointer-events: none; opacity: .055; mix-blend-mode: multiply;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='220' height='220'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 .9 0'/></filter><rect width='220' height='220' filter='url(%23n)'/></svg>"); }
+  .step { top: 70px; padding: 9px 18px; border-radius: 999px; background: rgba(0,113,227,.10); font-size: 17px; letter-spacing: .16em; color: #0062c4; backdrop-filter: blur(12px); }
+  .ttl { top: 128px; font-size: 80px; font-weight: 700; letter-spacing: -.042em; color: #0b1220; }
+  .window, .clist { background: rgba(255,255,255,.80); backdrop-filter: blur(26px) saturate(1.5); border: 1px solid rgba(255,255,255,.95); border-radius: 28px;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.9), 0 60px 110px -30px rgba(16,28,72,.28), 0 24px 44px -24px rgba(16,28,72,.22), 0 2px 6px rgba(16,28,72,.06); }
+  .clist { padding: 30px 34px; }
+  .pill, .chip { background: rgba(255,255,255,.86); backdrop-filter: blur(18px) saturate(1.4); border: 1px solid rgba(255,255,255,.95);
+    box-shadow: 0 22px 44px -18px rgba(16,28,72,.30), 0 4px 10px rgba(16,28,72,.06); }
+  .pill.red { background: rgba(255,228,228,.94); border-color: #ffd0d0; } .pill.green { background: rgba(218,255,240,.94); border-color: #b9f0d6; }
+  .pill.dark { background: rgba(13,18,32,.9); border-color: rgba(255,255,255,.14); }
+  .legend { background: rgba(13,18,32,.84); backdrop-filter: blur(20px) saturate(1.4); border: 1px solid rgba(255,255,255,.14);
+    box-shadow: 0 30px 60px -22px rgba(8,12,32,.55); padding: 16px 32px; font-size: 25px; letter-spacing: -.005em; }
+  .legend b { background: linear-gradient(90deg, #7cc0ff, #b79bff); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  .name { backdrop-filter: blur(14px); border: 1px solid rgba(255,255,255,.9); }
+  .cb { border-radius: 10px; box-shadow: inset 0 1px 2px rgba(16,28,72,.08); }
+  .cb.on { background: linear-gradient(180deg, #2fbf71, #17914d); border-color: #17914d; box-shadow: 0 6px 14px -4px rgba(23,145,77,.5); }
+  .stamp { backdrop-filter: blur(6px); box-shadow: 0 18px 30px -16px rgba(16,28,72,.35); }
+  use[href="#plane"] { filter: drop-shadow(0 22px 16px rgba(18,36,80,.20)); }
+  use[href="#case"] { filter: drop-shadow(0 10px 8px rgba(18,36,80,.22)); }
+  .endchips { display: flex; gap: 14px; margin-top: 46px; }
+  .endchips span { padding: 11px 22px; border-radius: 999px; background: rgba(255,255,255,.86); border: 1px solid rgba(255,255,255,.95); font-size: 22px; font-weight: 600; color: #26344d;
+    box-shadow: 0 18px 36px -18px rgba(16,28,72,.3); }
+  .brand { position: fixed; right: 110px; top: 70px; z-index: 50; display: flex; align-items: center; gap: 12px; padding: 11px 22px; border-radius: 999px; background: rgba(255,255,255,.82); backdrop-filter: blur(16px); border: 1px solid rgba(255,255,255,.95); box-shadow: 0 18px 36px -18px rgba(16,28,72,.3); font-size: 22px; font-weight: 600; color: #44546f; }
+  .brand b { font-size: 25px; font-weight: 750; letter-spacing: -.02em; background: linear-gradient(90deg, #0071e3, #7b4fe0); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  .livebadge { position: absolute; left: 120px; top: 64px; display: inline-flex; align-items: center; gap: 10px; padding: 9px 18px; border-radius: 999px; background: rgba(229,56,59,.10); color: #b3261e; font-size: 17px; font-weight: 700; letter-spacing: .16em; }
+  .livebadge i { width: 11px; height: 11px; border-radius: 50%; background: #e5383b; box-shadow: 0 0 0 5px rgba(229,56,59,.18); }
+  .livettl { position: absolute; left: 120px; top: 112px; font-size: 58px; font-weight: 700; letter-spacing: -.035em; color: #0b1220; }
+  .livecard { position: absolute; border-radius: 22px; background: #fff; border: 1px solid rgba(16,28,72,.08); box-shadow: 0 70px 120px -34px rgba(16,28,72,.34), 0 26px 46px -26px rgba(16,28,72,.24); }
+  .livesteps { position: absolute; left: 120px; top: 330px; width: 800px; display: flex; flex-direction: column; gap: 22px; }
+  .livestep { display: flex; align-items: center; gap: 22px; font-size: 36px; font-weight: 600; letter-spacing: -.02em; color: #0b1220; }
+  .livestep span { width: 58px; height: 58px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: 26px; font-weight: 750; background: #e9eef7; color: #44546f; flex: none; }
+  .livestep.on span { background: linear-gradient(180deg, #2b8cff, #0058c9); color: #fff; box-shadow: 0 12px 22px -8px rgba(0,88,201,.55); }
+
+  /* ===== Launch film: dark keynote stage, real footage in a lit screen, one idea of type at a time ===== */
+  html, body { background: #060912; }
+  #stage { background: radial-gradient(1500px 950px at 50% 36%, #17233f 0%, #0a1022 56%, #060912 100%); }
+  #grade { position: fixed; inset: 0; z-index: 20; pointer-events: none; opacity: 0; }
+  #screen { position: fixed; z-index: 30; overflow: hidden; border-radius: 18px; background: #fff; opacity: 0;
+    box-shadow: 0 0 0 1px rgba(255,255,255,.14), 0 70px 150px -30px rgba(0,0,0,.8), 0 0 110px -18px rgba(58,151,255,.38); }
+  #cam { position: absolute; left: 0; top: 0; transform-origin: 0 0; }
+  #shot { position: absolute; left: 0; top: 0; width: 100%; height: 100%; }
+  #ringx { position: absolute; border: 5px solid #3a97ff; border-radius: 12px; opacity: 0; box-shadow: 0 0 0 4000px rgba(6,9,18,.5), 0 0 30px rgba(58,151,255,.75); }
+  #live { position: fixed; z-index: 40; display: inline-flex; align-items: center; gap: 10px; padding: 9px 18px; border-radius: 999px; background: rgba(229,56,59,.16); color: #ff8f91; font-size: 16px; font-weight: 700; letter-spacing: .16em; opacity: 0; }
+  #live i { width: 10px; height: 10px; border-radius: 50%; background: #ff5a5d; box-shadow: 0 0 0 5px rgba(229,56,59,.22); }
+  #chip { position: fixed; z-index: 40; left: 120px; top: 66px; padding: 9px 18px; border-radius: 999px; font-size: 17px; font-weight: 700; letter-spacing: .16em; opacity: 0; }
+  #H1, #H2 { position: fixed; z-index: 40; letter-spacing: -.04em; line-height: 1.06; opacity: 0; }
+  #cards3 { position: fixed; z-index: 40; left: 210px; top: 122px; display: flex; gap: 16px; opacity: 0; }
+  #cards3 span { padding: 14px 26px; border-radius: 14px; background: rgba(255,255,255,.1); border: 1px solid rgba(255,255,255,.24); color: #fff; font-size: 32px; font-weight: 600; letter-spacing: -.02em; }
+  #illus { position: fixed; z-index: 40; left: 120px; bottom: 92px; font-size: 14px; letter-spacing: .16em; font-weight: 700; text-transform: uppercase; opacity: 0; }
+  #rv-word { position: fixed; z-index: 41; left: 0; right: 0; top: 300px; text-align: center; font-size: 200px; font-weight: 750; letter-spacing: -.05em; line-height: 1.1; opacity: 0;
+    background: linear-gradient(90deg, #6fb6ff, #b79bff); -webkit-background-clip: text; background-clip: text; color: transparent; filter: drop-shadow(0 0 70px rgba(90,150,255,.45)); }
+  #rv-tag { position: fixed; z-index: 41; left: 0; right: 0; top: 566px; text-align: center; font-size: 46px; font-weight: 500; letter-spacing: -.02em; color: #e8eefc; opacity: 0; }
+  #cl-foot { position: fixed; z-index: 41; left: 0; right: 0; top: 790px; text-align: center; font-size: 25px; line-height: 1.7; color: #c9d4ea; opacity: 0; }
+  #rv-glow { position: absolute; inset: 0; opacity: 0; background: radial-gradient(1500px 720px at 50% 112%, rgba(255,190,130,.6), rgba(120,150,255,.28) 46%, transparent 72%); }
+  #rv-sweep { position: absolute; top: 0; bottom: 0; left: 0; width: 520px; opacity: 0; background: linear-gradient(90deg, transparent, rgba(255,255,255,.16), transparent); }
+  #hk-line { position: absolute; left: 0; right: 0; top: 592px; height: 2px; opacity: 0; background: linear-gradient(90deg, transparent, rgba(255,255,255,.2), transparent); }
+  #hk-ticket { position: absolute; top: 486px; left: 0; width: 520px; padding: 24px 30px; border-radius: 20px; opacity: 0; background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.22); color: #fff; font-size: 28px; font-weight: 600; line-height: 1.3; }
+  #hk-ticket small { display: block; font-size: 16px; letter-spacing: .14em; color: #9cc4ff; font-weight: 700; margin-bottom: 8px; }
+  #hk-bar { position: absolute; left: 1200px; top: 320px; width: 24px; height: 460px; border-radius: 12px; opacity: 0; background: repeating-linear-gradient(180deg, #e5383b 0 46px, #ffffff 46px 92px); }
+  .stat { width: 1100px !important; top: 330px !important; }
+  .stat .num { font-size: 190px !important; line-height: 1.05; color: #fff !important; -webkit-text-fill-color: #fff; text-shadow: 0 0 90px rgba(255,110,110,.7), 0 0 30px rgba(255,140,140,.35); }
+  .stat .cap { font-size: 34px !important; margin-top: 22px; color: #d5dbe8 !important; line-height: 1.35; }
+  #s-src { font-size: 22px !important; color: #a9b3c7 !important; }
+</style>
+</head>
+<body>
+
+<svg width="0" height="0" style="position:absolute"><defs>
+  <symbol id="plane" viewBox="0 0 520 200">
+    <rect x="146" y="136" width="6" height="22" fill="#6b7480"/><rect x="356" y="136" width="6" height="22" fill="#6b7480"/>
+    <circle cx="149" cy="160" r="9" fill="#2b3340"/><circle cx="359" cy="160" r="9" fill="#2b3340"/>
+    <path d="M62 82 L18 14 L74 14 L140 82Z" fill="url(#tail)"/>
+    <path d="M70 106 L16 126 L52 128 L112 112Z" fill="#b9c4d2"/>
+    <path d="M36 110 Q36 80 92 78 L398 78 Q478 80 504 108 Q482 136 398 138 L92 138 Q36 136 36 110Z" fill="url(#fus)" stroke="#c3cddb" stroke-width="2.5"/>
+    <path d="M444 86 Q480 90 498 106 L452 106Z" fill="#26344d"/>
+    <rect x="60" y="116" width="400" height="5" rx="2" fill="#0071e3" opacity=".85"/>
+    <g fill="#8fbdf2"><circle cx="150" cy="98" r="7"/><circle cx="182" cy="98" r="7"/><circle cx="214" cy="98" r="7"/><circle cx="246" cy="98" r="7"/><circle cx="278" cy="98" r="7"/><circle cx="310" cy="98" r="7"/><circle cx="342" cy="98" r="7"/><circle cx="374" cy="98" r="7"/><circle cx="406" cy="98" r="7"/></g>
+    <path d="M232 122 L188 152 L256 152 L336 122Z" fill="#b9c4d2"/>
+    <ellipse cx="236" cy="152" rx="36" ry="13" fill="#3b4656"/>
+  </symbol>
+  <symbol id="person" viewBox="0 0 80 150"><path d="M6 150 Q6 62 40 58 Q74 62 74 150Z" fill="currentColor"/><circle cx="40" cy="28" r="22" fill="#b97a4e"/></symbol>
+  <symbol id="cloud" viewBox="0 0 300 120"><g fill="currentColor"><ellipse cx="90" cy="80" rx="80" ry="36"/><ellipse cx="160" cy="56" rx="70" ry="48"/><ellipse cx="220" cy="84" rx="70" ry="32"/></g></symbol>
+  <symbol id="case" viewBox="0 0 160 140"><rect x="52" y="6" width="56" height="34" rx="10" fill="none" stroke="#4a3a2c" stroke-width="8"/><rect x="6" y="30" width="148" height="104" rx="16" fill="currentColor"/><rect x="6" y="68" width="148" height="9" fill="rgba(0,0,0,.16)"/></symbol>
+  <symbol id="idcard" viewBox="0 0 120 76"><rect width="120" height="76" rx="8" fill="#fff" stroke="#cfd6e0" stroke-width="2"/><circle cx="28" cy="30" r="13" fill="#c9d3e0"/><rect x="12" y="50" width="32" height="8" rx="3" fill="#c9d3e0"/><rect x="56" y="18" width="50" height="7" rx="3" fill="#9aa6b6"/><rect x="56" y="34" width="50" height="7" rx="3" fill="#c9d3e0"/><rect x="56" y="50" width="34" height="7" rx="3" fill="#c9d3e0"/></symbol>
+  <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffe3c8"/><stop offset=".6" stop-color="#dbeaff"/><stop offset="1" stop-color="#eaf2fb"/></linearGradient>
+  <linearGradient id="day" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#a9d0ff"/><stop offset=".55" stop-color="#d6e9ff"/><stop offset="1" stop-color="#f3f8ff"/></linearGradient><linearGradient id="apron" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#e9eef5"/><stop offset="1" stop-color="#cbd4e0"/></linearGradient><linearGradient id="tarmac" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#454e60"/><stop offset="1" stop-color="#2c3342"/></linearGradient><linearGradient id="fus" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffffff"/><stop offset=".62" stop-color="#f4f7fb"/><stop offset="1" stop-color="#cfd9e6"/></linearGradient><linearGradient id="tail" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#3a97ff"/><stop offset="1" stop-color="#0055c8"/></linearGradient><radialGradient id="glow"><stop offset="0" stop-color="#fff3d6" stop-opacity=".95"/><stop offset=".35" stop-color="#ffd794" stop-opacity=".55"/><stop offset="1" stop-color="#ffd794" stop-opacity="0"/></radialGradient>
+  <linearGradient id="night" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#070b18"/><stop offset="1" stop-color="#162036"/></linearGradient>
+</defs></svg>
+
+
+<!-- 1. THE GATE: every flight has a check -->
+<section class="scene" id="gate">
+  <svg class="art" viewBox="0 0 1920 1080">
+    <rect width="1920" height="780" fill="url(#sky)"/><path d="M0 780 L0 690 Q240 640 520 700 T1040 660 T1500 700 T1920 640 L1920 780Z" fill="#f1cfc0" opacity=".55"/><path d="M0 780 L0 740 Q300 700 700 740 T1300 725 T1920 740 L1920 780Z" fill="#e6dbe6" opacity=".8"/>
+    <circle cx="1180" cy="300" r="330" fill="url(#glow)"/><circle cx="1180" cy="300" r="78" fill="#ffd591"/>
+    <use href="#cloud" x="760" y="170" width="300" height="120" style="color:#fff" opacity=".9"/>
+    <use href="#cloud" x="250" y="250" width="230" height="92" style="color:#fff" opacity=".8"/>
+    <rect y="780" width="1920" height="300" fill="url(#apron)"/><rect y="780" width="1920" height="6" fill="#c3ccd7"/>
+    <g fill="#f4c542"><rect x="0" y="930" width="140" height="10"/><rect x="260" y="930" width="140" height="10"/><rect x="520" y="930" width="140" height="10"/><rect x="780" y="930" width="140" height="10"/><rect x="1040" y="930" width="140" height="10"/><rect x="1300" y="930" width="140" height="10"/><rect x="1560" y="930" width="140" height="10"/><rect x="1820" y="930" width="140" height="10"/></g>
+    <rect x="0" y="450" width="300" height="330" fill="#fff"/><rect x="0" y="450" width="300" height="14" fill="#0071e3"/>
+    <g fill="#bcd6f5"><rect x="30" y="500" width="240" height="60" rx="6"/><rect x="30" y="590" width="240" height="60" rx="6"/></g>
+    <rect x="300" y="560" width="250" height="56" rx="10" fill="#e9eef4" stroke="#c3ccd7" stroke-width="3"/>
+    <g id="g-plane"><use href="#plane" x="470" y="468" width="960" height="369"/></g>
+    <g id="g-crew"><use href="#person" x="0" y="640" width="76" height="142" style="color:#f08a24"/><rect x="58" y="700" width="34" height="44" rx="5" fill="#fff" stroke="#8a94a3" stroke-width="3"/></g>
+  </svg>
+  <div class="step" id="g-step">BEFORE EVERY FLIGHT</div>
+  <div class="ttl" id="g-ttl">A walk-around check.</div>
+  <div class="clist" id="g-list" style="left:1420px; top:300px; width:380px;">
+    <h5>Pre-flight checklist</h5>
+    <div class="crow"><span class="cb" id="g-c1"></span>Fuel</div>
+    <div class="crow"><span class="cb" id="g-c2"></span>Doors</div>
+    <div class="crow"><span class="cb" id="g-c3"></span>Cargo</div>
+  </div>
+  <div class="legendwrap"><div class="legend" id="g-leg">A check before take-off. It’s why flying works.</div></div>
+</section>
+
+<!-- 2. NO CHECK: software ships without one -->
+<section class="scene" id="nocheck">
+  <svg class="art" viewBox="0 0 1920 1080">
+    <rect width="1920" height="1080" fill="url(#day)"/><path d="M0 826 L0 736 Q240 686 520 746 T1040 706 T1500 746 T1920 686 L1920 826Z" fill="#b9d3f3" opacity=".55"/><path d="M0 826 L0 786 Q300 746 700 786 T1300 771 T1920 786 L1920 826Z" fill="#cfe0f6" opacity=".8"/>
+    <use href="#cloud" x="1300" y="120" width="320" height="128" style="color:#fff"/><use href="#cloud" x="200" y="330" width="240" height="96" style="color:#fff" opacity=".8"/>
+    <rect y="826" width="1920" height="254" fill="url(#tarmac)"/>
+    <g fill="#fff" opacity=".8"><rect x="60" y="940" width="160" height="12"/><rect x="380" y="940" width="160" height="12"/><rect x="700" y="940" width="160" height="12"/><rect x="1020" y="940" width="160" height="12"/><rect x="1340" y="940" width="160" height="12"/><rect x="1660" y="940" width="160" height="12"/></g>
+    <g id="n-p1"><line x1="20" y1="76" x2="-30" y2="76" stroke="#8a94a3" stroke-width="3"/><rect x="-350" y="48" width="320" height="56" rx="10" fill="#fff" stroke="#cfd6e0" stroke-width="2"/><text x="-190" y="84" text-anchor="middle" font-size="22" font-weight="600" fill="#44546f">Fix dashboard filter</text><use href="#plane" width="380" height="146"/></g>
+    <g id="n-p2"><line x1="20" y1="76" x2="-30" y2="76" stroke="#8a94a3" stroke-width="3"/><rect x="-350" y="48" width="320" height="56" rx="10" fill="#fff" stroke="#cfd6e0" stroke-width="2"/><text x="-190" y="84" text-anchor="middle" font-size="22" font-weight="600" fill="#44546f">Update footer year</text><use href="#plane" width="380" height="146"/></g>
+    <g id="n-p3"><line x1="20" y1="76" x2="-30" y2="76" stroke="#8a94a3" stroke-width="3"/><rect x="-390" y="48" width="360" height="56" rx="10" fill="#fff" stroke="#cfd6e0" stroke-width="2"/><text x="-210" y="84" text-anchor="middle" font-size="22" font-weight="600" fill="#44546f">Add SA ID number field</text><use href="#plane" width="380" height="146"/>
+      <line x1="200" y1="100" x2="200" y2="170" stroke="#6b7480" stroke-width="3"/><use href="#case" x="150" y="160" width="100" height="88" style="color:#c2543a"/>
+      <circle id="n-ring" cx="200" cy="208" r="74" fill="none" stroke="#e5383b" stroke-width="6"/></g>
+  </svg>
+  <div class="step">MEANWHILE, IN SOFTWARE</div>
+  <div class="ttl">Tickets take off with no check.</div>
+  <div class="pill" id="n-tue" style="left:120px; top:300px;">Tuesday · ticket written</div>
+  <div class="pill" id="n-thu" style="left:120px; top:372px;">Thursday · shipped</div>
+  <div class="pill red" id="n-tag" style="left:0; top:0;">On board: customers’ ID numbers</div>
+  <div class="legendwrap"><div class="legend" id="n-leg">Nobody looked at what was on board.</div></div>
+</section>
+
+<!-- 3. STORM: the complaint -->
+<section class="scene dark" id="storm">
+  <svg class="art" viewBox="0 0 1920 1080">
+    <rect width="1920" height="1080" fill="url(#night)"/>
+    <rect id="st-flash" width="1920" height="1080" fill="#cfd8ff"/>
+    <use href="#cloud" x="80" y="60" width="620" height="248" style="color:#1c2540"/><use href="#cloud" x="1150" y="20" width="700" height="280" style="color:#1c2540"/><use href="#cloud" x="640" y="-40" width="560" height="224" style="color:#222c4a"/>
+    <polyline id="st-bolt" points="1380,250 1330,400 1390,400 1320,580" fill="none" stroke="#fff" stroke-width="8" stroke-linejoin="round"/>
+    <g id="st-plane"><use href="#plane" x="-330" y="-127" width="660" height="254"/></g>
+    <g id="st-case"><use href="#case" x="-60" y="-52" width="120" height="105" style="color:#c2543a"/></g>
+    <g id="st-id1"><use href="#idcard" x="-60" y="-38" width="120" height="76"/></g>
+    <g id="st-id2"><use href="#idcard" x="-60" y="-38" width="120" height="76"/></g>
+    <g id="st-id3"><use href="#idcard" x="-60" y="-38" width="120" height="76"/></g>
+    <g id="st-id4"><use href="#idcard" x="-60" y="-38" width="120" height="76"/></g>
+  </svg>
+  <div class="rain" id="st-rain"></div>
+  <div class="eyebrow" id="st-eye" style="position:absolute; left:0; right:0; top:110px; text-align:center;">EIGHT MONTHS LATER</div>
+  <div class="letter small" id="st-letter" style="left:130px; top:560px;">
+    <div style="font-size:13px; letter-spacing:.14em; color:#8a8a8e; font-weight:700;">COMPLAINT UNDER POPIA</div>
+    <div style="margin-top:12px;">Customers’ ID numbers were collected with <b>no stated reason</b> and <b>kept forever</b>.</div>
+    <div style="margin-top:12px; font-size:14px; color:#8a8a8e;">Illustrative example.</div>
+  </div>
+  <div class="big" id="st-big" style="position:absolute; left:0; right:0; top:740px; color:#fff;">Who approved this?</div>
+  <div class="sub" id="st-sub" style="position:absolute; left:0; right:0; top:870px; font-size:40px; color:#ff6b6e;">Nobody knows.</div>
+</section>
+
+<section class="scene dark" id="stakes">
+  <div class="eyebrow" id="s-eye" style="position:absolute; left:0; right:0; top:130px; text-align:center;">THE REGULATOR IS FINING</div>
+  <div class="stat" id="s1" style="left:200px;"><div class="num">R1 million</div><div class="cap">a major bank<br>October 2026</div></div>
+  <div class="stat" id="s2" style="left:730px;"><div class="num">R500,000</div><div class="cap">a college that shared personal information without a lawful reason · October 2026</div></div>
+  <div class="stat" id="s3" style="left:1260px;"><div class="num">10 years</div><div class="cap">maximum prison term for serious POPIA offences</div></div>
+  <div class="sub" id="s-src" style="position:absolute; left:0; right:0; top:880px; font-size:20px; color:#8a8a8e;">Source: Information Regulator infringement notices announced 26 October 2026; POPIA Chapter 11</div>
+</section>
+
+
+<section class="scene dark" id="rewind">
+  <div class="rw-lines" id="rw-lines"></div>
+  <div class="big" id="rw-sym" style="position:absolute; left:0; right:0; top:330px; color:#fff; font-size:150px;">◀◀</div>
+  <div class="mid" id="rw-time" style="position:absolute; left:0; right:0; top:560px; color:#fff; font-variant-numeric: tabular-nums;">8 months earlier</div>
+  <div class="big grad" id="rw-word" style="position:absolute; left:0; right:0; top:380px; font-size:150px;">Preflight</div>
+  <div class="sub" id="rw-sub" style="position:absolute; left:0; right:0; top:580px; font-size:38px; color:#d2d2d7;">Privacy review, before you build.</div>
+</section>
+
+
+
+<!-- 6. THE SCANNER -->
+<section class="scene" id="scan">
+  <svg class="art" viewBox="0 0 1920 1080">
+    <rect x="0" y="720" width="1920" height="44" fill="#2f3640"/>
+    <g fill="#566070"><circle cx="100" cy="742" r="13"/><circle cx="300" cy="742" r="13"/><circle cx="500" cy="742" r="13"/><circle cx="700" cy="742" r="13"/><circle cx="1240" cy="742" r="13"/><circle cx="1440" cy="742" r="13"/><circle cx="1640" cy="742" r="13"/><circle cx="1840" cy="742" r="13"/></g>
+    <g fill="#8a94a3"><rect x="180" y="764" width="16" height="90"/><rect x="1720" y="764" width="16" height="90"/></g>
+    <g id="sc-bag">
+      <rect x="130" y="-196" width="120" height="50" rx="14" fill="none" stroke="#4a3a2c" stroke-width="10"/>
+      <rect x="0" y="-160" width="380" height="160" rx="18" fill="#fff" stroke="#cfd6e0" stroke-width="3"/>
+      <text x="24" y="-118" font-size="18" font-weight="700" fill="#6e6e73">PRIV-1 · JIRA TICKET</text>
+      <text x="24" y="-78" font-size="25" font-weight="600" fill="#1d1d1f">Add SA ID number field</text>
+      <text x="24" y="-44" font-size="25" font-weight="600" fill="#1d1d1f">to customer signup</text>
+      <g id="sc-tag"><line x1="330" y1="-160" x2="352" y2="-112" stroke="#ae2a19" stroke-width="3"/><rect x="232" y="-116" width="226" height="42" rx="8" fill="#e5383b"/><text x="345" y="-88" text-anchor="middle" font-size="19" font-weight="700" fill="#fff">Identifying numbers</text></g>
+    </g>
+    <rect x="770" y="330" width="420" height="434" rx="26" fill="#3b4656"/>
+    <rect x="770" y="330" width="420" height="70" rx="26" fill="#2b3340"/>
+    <circle id="sc-lamp" cx="1150" cy="365" r="14" fill="#31c46c"/>
+    <text x="800" y="375" font-size="22" font-weight="700" fill="#aeb8c6" letter-spacing="3">PREFLIGHT SCANNER</text>
+    <rect x="752" y="520" width="26" height="200" rx="6" fill="#222a35"/><rect x="1182" y="520" width="26" height="200" rx="6" fill="#222a35"/>
+  </svg>
+  <div class="step">STEP 1 · THE SCANNER</div>
+  <div class="ttl">It reads every ticket.</div>
+  <div class="window dark-card" id="sc-screen" style="left:1290px; top:240px; width:520px; padding:26px 28px; background:#101623; color:#d8f3ff; font-size:25px; line-height:1.5;">
+    <div style="font-size:15px; letter-spacing:.14em; font-weight:700; color:#6fb7e8;">SCANNING · PRIV-1</div>
+    <div style="margin-top:12px;">Add <span id="sc-hl">SA ID number</span> field to customer signup</div>
+    <div id="sc-verdict" style="margin-top:16px; color:#ff8f8f; font-weight:700;">⚠ Personal information on board</div>
+  </div>
+  <div class="pill" id="sc-k1" style="left:120px; top:300px;">🪪 ID numbers</div>
+  <div class="pill" id="sc-k2" style="left:120px; top:372px;">🩺 Health details</div>
+  <div class="pill" id="sc-k3" style="left:120px; top:444px;">🧒 Children’s data</div>
+  <div class="legendwrap"><div class="legend" id="sc-leg"><b>In Jira</b>Your rules read each ticket’s title and description as it is written.</div></div>
+</section>
+
+<!-- 7. THE GATE (blocked) and 10. TAKE-OFF share this stage -->
+<section class="scene" id="blocked">
+  <svg class="art" viewBox="0 0 1920 1080">
+    <rect width="1920" height="780" fill="url(#day)"/><path d="M0 780 L0 690 Q240 640 520 700 T1040 660 T1500 700 T1920 640 L1920 780Z" fill="#b9d3f3" opacity=".55"/><path d="M0 780 L0 740 Q300 700 700 740 T1300 725 T1920 740 L1920 780Z" fill="#cfe0f6" opacity=".8"/>
+    <use href="#cloud" x="180" y="250" width="260" height="104" style="color:#fff" opacity=".9"/>
+    <rect y="780" width="1920" height="300" fill="url(#apron)"/><rect y="780" width="1920" height="6" fill="#c3ccd7"/>
+    <g fill="#f4c542"><rect x="0" y="930" width="140" height="10"/><rect x="260" y="930" width="140" height="10"/><rect x="520" y="930" width="140" height="10"/><rect x="780" y="930" width="140" height="10"/><rect x="1040" y="930" width="140" height="10"/><rect x="1300" y="930" width="140" height="10"/><rect x="1560" y="930" width="140" height="10"/><rect x="1820" y="930" width="140" height="10"/></g>
+    <g id="b-plane"><use href="#plane" x="0" y="0" width="760" height="292"/></g>
+    <rect x="1000" y="640" width="26" height="140" rx="5" fill="#566070"/>
+    <g id="b-arm"><rect x="1013" y="652" width="430" height="20" rx="8" fill="#fff" stroke="#c3ccd7" stroke-width="2"/><g fill="#e5383b"><rect x="1050" y="652" width="50" height="20"/><rect x="1150" y="652" width="50" height="20"/><rect x="1250" y="652" width="50" height="20"/><rect x="1350" y="652" width="50" height="20"/></g></g>
+    <circle id="b-lamp" cx="1013" cy="624" r="20" fill="#e5383b"/>
+  </svg>
+  <div class="step" id="b-step">STEP 2 · THE GATE</div>
+  <div class="ttl" id="b-ttl">The gate stays closed.</div>
+  <div class="pill" id="b-tick" style="left:0; top:0;">PRIV-1 · Add SA ID number field</div>
+  <div class="clist" id="b-list" style="left:1180px; top:150px; width:620px;">
+    <h5>Before work starts</h5>
+    <div class="crow" id="b-r1"><span class="cb"></span>Why do you need this data?</div>
+    <div class="crow" id="b-r2"><span class="cb"></span>What is your lawful basis?</div>
+    <div class="crow" id="b-r3"><span class="cb"></span>When is it deleted?</div>
+    <div class="crow" id="b-r4" style="border-top:1px solid var(--line); margin-top:8px; padding-top:16px; font-size:23px; color:var(--muted);">Approver: <span class="avatar io">N</span><b style="color:var(--ink)">Nicholas</b></div>
+  </div>
+  <div class="legendwrap"><div class="legend" id="b-leg"><b>In Jira</b>Moving the ticket to In Progress is refused, with the list of what is missing.</div></div>
+</section>
+
+<!-- 8. THE CO-PILOT -->
+<section class="scene" id="copilot">
+  <svg class="art" viewBox="0 0 1920 1080">
+    <rect width="1920" height="1080" fill="url(#day)"/>
+    <path d="M0 0 H1920 V250 Q960 330 0 250Z" fill="#2b3445"/>
+    <use href="#person" x="400" y="330" width="330" height="619" style="color:#26344d"/>
+    <path d="M498 372 Q565 320 632 372 L632 392 L498 392Z" fill="#26344d"/><rect x="486" y="388" width="158" height="14" rx="6" fill="#0071e3"/>
+    <rect x="1255" y="330" width="10" height="56" fill="#7b4fe0"/><circle cx="1260" cy="322" r="14" fill="#c9b6ff"/>
+    <rect x="1130" y="380" width="260" height="200" rx="44" fill="#7b4fe0"/>
+    <circle cx="1210" cy="470" r="26" fill="#fff"/><circle cx="1310" cy="470" r="26" fill="#fff"/><circle cx="1214" cy="474" r="11" fill="#26344d"/><circle cx="1306" cy="474" r="11" fill="#26344d"/>
+    <rect x="1220" y="528" width="80" height="12" rx="6" fill="#c9b6ff"/>
+    <rect x="1160" y="600" width="200" height="340" rx="40" fill="#8f6ae8"/>
+    <rect y="720" width="1920" height="360" fill="#2b3445"/><rect y="720" width="1920" height="10" fill="#3b4656"/>
+    <g fill="none" stroke="#566070" stroke-width="6"><circle cx="180" cy="900" r="60"/><circle cx="1740" cy="900" r="60"/><circle cx="960" cy="940" r="46"/></g>
+    <g stroke="#8ec5ff" stroke-width="6" stroke-linecap="round"><line x1="180" y1="900" x2="214" y2="866"/><line x1="1740" y1="900" x2="1700" y2="880"/><line x1="960" y1="940" x2="960" y2="904"/></g>
+  </svg>
+  <div class="step" style="color:#8ec5ff">STEP 3 · THE CO-PILOT</div>
+  <div class="ttl" style="color:#fff">Rovo drafts. A person confirms.</div>
+  <div class="name" style="left:215px; top:560px;">Ben <small>developer</small></div>
+  <div class="name" style="left:1170px; top:640px;">Rovo <small>AI co-pilot</small></div>
+  <div class="clist" id="cp-paper" style="left:0; top:0; width:470px; font-size:24px; line-height:1.4; border:3px solid #ddd0fb;">
+    <span class="loz purple" id="cp-loz">Rovo draft</span>
+    <div style="margin-top:12px;"><b>Purpose:</b> verify callers against FICA records before account changes.</div>
+    <div id="cp-foot" style="margin-top:12px; font-size:19px; color:var(--purple); font-weight:600;">Does not count yet</div>
+  </div>
+  <div class="pill green" id="cp-yes" style="left:700px; top:270px;">AI can draft ✓</div>
+  <div class="pill red" id="cp-no" style="left:960px; top:270px;">AI can’t approve ✗</div>
+  <div class="legendwrap"><div class="legend" id="cp-leg"><b>In Jira</b>The Rovo agent saves a draft. It counts only after someone clicks “Use draft”.</div></div>
+</section>
+
+<!-- 9. THE CONTROL TOWER -->
+<section class="scene" id="tower">
+  <svg class="art" viewBox="0 0 1920 1080">
+    <rect width="1920" height="780" fill="url(#day)"/><path d="M0 780 L0 690 Q240 640 520 700 T1040 660 T1500 700 T1920 640 L1920 780Z" fill="#b9d3f3" opacity=".55"/><path d="M0 780 L0 740 Q300 700 700 740 T1300 725 T1920 740 L1920 780Z" fill="#cfe0f6" opacity=".8"/>
+    <use href="#cloud" x="1500" y="90" width="300" height="120" style="color:#fff"/>
+    <rect y="780" width="1920" height="300" fill="url(#apron)"/><rect y="780" width="1920" height="6" fill="#c3ccd7"/>
+    <polygon id="tw-beam" points="470,330 760,250 760,640" fill="#31c46c" opacity=".25"/>
+    <polygon points="270,780 390,780 372,440 288,440" fill="#c9d3e0"/>
+    <polygon points="190,440 470,440 510,300 150,300" fill="#9cc7f5" stroke="#566070" stroke-width="6"/>
+    <rect x="140" y="280" width="380" height="26" rx="8" fill="#566070"/><rect x="180" y="436" width="300" height="18" rx="6" fill="#566070"/>
+    <rect x="326" y="210" width="8" height="70" fill="#566070"/><circle id="tw-lamp" cx="330" cy="200" r="20" fill="#e5383b"/>
+    <use href="#person" x="296" y="312" width="68" height="127" style="color:#136c3a"/>
+    <rect x="180" y="436" width="300" height="18" rx="6" fill="#566070"/>
+  </svg>
+  <div class="step" style="left:760px">STEP 4 · THE CONTROL TOWER</div>
+  <div class="ttl" style="left:760px">One person clears it.</div>
+  <div class="name" style="left:150px; top:500px;">Nicholas <small>Information Officer</small></div>
+  <div class="window" id="tw-board" style="left:760px; top:290px; width:1040px; padding:30px 36px 20px;">
+    <div style="font-size:30px; font-weight:650; letter-spacing:-.01em;">Preflight reviews</div>
+    <table style="margin-top:12px;">
+      <tr><th>Ticket</th><th>Status</th></tr>
+      <tr id="tw-r1"><td><b>PRIV-1</b> · Add SA ID number field</td><td><span class="loz amber" id="tw-s1">Waiting for approval</span></td></tr>
+      <tr><td><b>PRIV-2</b> · Store learner medical notes</td><td><span class="loz grey">Waiting on the team</span></td></tr>
+      <tr><td><b>PRIV-4</b> · Sync customers to US vendor</td><td><span class="loz grey">Waiting on the team</span></td></tr>
+    </table>
+  </div>
+  <div class="ring" id="tw-ring"></div>
+  <div class="stamp" id="tw-stamp" style="left:1380px; top:290px;">CLEARED</div>
+  <div class="legendwrap"><div class="legend" id="tw-leg"><b>In Jira</b>Approvers see every waiting ticket in one inbox, and sign off on the ticket.</div></div>
+</section>
+
+<!-- 11. YOU CAN'T SNEAK PAST -->
+<section class="scene" id="dodge">
+  <div class="step">NO SNEAKING PAST</div>
+  <div class="ttl">It remembers.</div>
+  <div class="window" id="d-left" style="left:120px; top:270px; width:800px; height:540px; padding:36px 40px;">
+    <div style="font-size:30px; font-weight:650;">Reword the ticket?</div>
+    <svg viewBox="0 0 720 300" style="width:720px; height:300px; margin-top:10px;">
+      <use href="#case" x="40" y="60" width="240" height="210" style="color:#c2543a"/>
+      <line x1="230" y1="100" x2="330" y2="130" stroke="#6b7480" stroke-width="4"/>
+      <g id="d-tag1"><rect x="320" y="96" width="330" height="70" rx="12" fill="#fff" stroke="#cfd6e0" stroke-width="3"/><text x="485" y="140" text-anchor="middle" font-size="28" font-weight="600" fill="#1d1d1f">“SA ID number”</text></g>
+      <g id="d-tag2"><rect x="320" y="96" width="330" height="70" rx="12" fill="#fff" stroke="#cfd6e0" stroke-width="3"/><text x="485" y="140" text-anchor="middle" font-size="28" font-weight="600" fill="#1d1d1f">“a notes field”</text></g>
+    </svg>
+    <div id="d-flag" style="display:flex; align-items:center; gap:14px; font-size:24px;"><span class="loz red">Still flagged</span>matched earlier: “SA ID number”</div>
+  </div>
+  <div class="window" id="d-right" style="left:1000px; top:270px; width:800px; height:540px; padding:36px 40px;">
+    <div style="font-size:30px; font-weight:650;">Change an answer after sign-off?</div>
+    <div class="field" style="margin-top:34px;"><label>Retention period</label><div class="input" id="d-ans" style="font-size:26px; padding:14px 16px;"></div></div>
+    <div class="stamp" id="d-stamp" style="left:60px; top:300px;">CLEARED</div>
+    <div id="d-note" style="position:absolute; left:40px; top:440px; font-size:24px; color:var(--muted);">The clearance is cancelled. It needs a new sign-off.</div>
+  </div>
+  <div class="legendwrap"><div class="legend" id="d-leg"><b>In Jira</b>Matches stick to the ticket, and edited answers make the approval out of date.</div></div>
+</section>
+
+<!-- 12. LANDING: the Done gate -->
+<section class="scene" id="landing">
+  <svg class="art" viewBox="0 0 1920 1080">
+    <rect width="1920" height="1080" fill="url(#day)"/><path d="M0 826 L0 736 Q240 686 520 746 T1040 706 T1500 746 T1920 686 L1920 826Z" fill="#b9d3f3" opacity=".55"/><path d="M0 826 L0 786 Q300 746 700 786 T1300 771 T1920 786 L1920 826Z" fill="#cfe0f6" opacity=".8"/>
+    <use href="#cloud" x="1350" y="160" width="300" height="120" style="color:#fff"/><use href="#cloud" x="120" y="420" width="240" height="96" style="color:#fff" opacity=".8"/>
+    <rect y="826" width="1920" height="254" fill="url(#tarmac)"/>
+    <g fill="#fff" opacity=".8"><rect x="60" y="940" width="160" height="12"/><rect x="380" y="940" width="160" height="12"/><rect x="700" y="940" width="160" height="12"/><rect x="1020" y="940" width="160" height="12"/><rect x="1340" y="940" width="160" height="12"/><rect x="1660" y="940" width="160" height="12"/></g>
+    <rect x="1640" y="640" width="14" height="186" fill="#8a94a3"/><rect x="1530" y="560" width="234" height="96" rx="14" fill="#fff" stroke="#c3ccd7" stroke-width="3"/>
+    <text x="1647" y="622" text-anchor="middle" font-size="40" font-weight="800" fill="#1d1d1f" letter-spacing="4">DONE</text>
+    <circle id="l-lamp" cx="1647" cy="530" r="20" fill="#e5383b"/>
+    <g id="l-plane"><use href="#plane" x="0" y="0" width="560" height="215"/></g>
+  </svg>
+  <div class="step">STEP 5 · THE LANDING CHECK</div>
+  <div class="ttl">Proof before Done.</div>
+  <div class="clist" id="l-card" style="left:1080px; top:270px; width:720px; font-size:25px;">
+    <h5 id="l-h">Second check · before Done</h5>
+    <div style="font-weight:600;">Link to the updated privacy notice</div>
+    <div class="input" id="l-url" style="margin-top:12px; font-size:24px; color:var(--blue); padding:12px 14px;"></div>
+    <div id="l-ok" style="margin-top:14px; font-weight:700; color:var(--green);">✓ Proof attached · cleared to land</div>
+  </div>
+  <div class="legendwrap"><div class="legend" id="l-leg"><b>In Jira</b>A second gate on the move to Done asks for the evidence link.</div></div>
+</section>
+
+<!-- 13. THE FLIGHT RECORDER -->
+<section class="scene" id="payoff">
+  <svg class="art" viewBox="0 0 1920 1080">
+    <rect x="150" y="430" width="470" height="300" rx="34" fill="#f08a24"/>
+    <rect x="150" y="430" width="470" height="300" rx="34" fill="none" stroke="#c96a10" stroke-width="6"/>
+    <g fill="#fff" opacity=".9"><rect x="190" y="470" width="60" height="16" transform="rotate(-45 220 478)"/></g>
+    <text x="385" y="570" text-anchor="middle" font-size="40" font-weight="800" fill="#fff" letter-spacing="3">FLIGHT</text>
+    <text x="385" y="622" text-anchor="middle" font-size="40" font-weight="800" fill="#fff" letter-spacing="3">RECORDER</text>
+    <text id="po-wo" x="385" y="676" text-anchor="middle" font-size="22" font-weight="700" fill="#5a2c00">write-once · nothing can be edited</text>
+  </svg>
+  <div class="step">THE FLIGHT RECORDER</div>
+  <div class="ttl">Every answer is kept.</div>
+  <div class="pill" id="po-c1" style="left:0;top:0">Purpose</div>
+  <div class="pill" id="po-c2" style="left:0;top:0">Lawful basis</div>
+  <div class="pill" id="po-c3" style="left:0;top:0">Retention</div>
+  <div class="pill green" id="po-c4" style="left:0;top:0">Approval</div>
+  <div class="pill" id="po-c5" style="left:0;top:0">Privacy notice</div>
+  <div class="pill dark" id="po-q" style="left:760px; top:268px; font-size:34px; padding:18px 30px;">“Who approved this?”</div>
+  <div class="window" id="po-rec" style="left:760px; top:360px; width:1040px; padding:28px 36px 20px; font-size:21px; line-height:1.5;">
+    <div style="display:flex; align-items:center; gap:14px;"><b style="font-size:28px; letter-spacing:-.01em;">Preflight record · PRIV-1</b><span class="loz green">Complete</span></div>
+    <div class="rec" id="r1"><span>Approved by</span><b><span class="avatar io">N</span> Nicholas, Information Officer · Tue 09:41</b></div>
+    <div class="rec" id="r2"><span>Purpose</span><b>Verify callers against FICA records before account changes</b></div>
+    <div class="rec" id="r3"><span>Lawful basis</span><b>Required to comply with an obligation imposed by law</b></div>
+    <div class="rec" id="r4"><span>Retention</span><b>Deleted five years after account closure</b></div>
+    <div class="rec" id="r5" style="border-bottom:0"><span>Privacy notice</span><b style="color:var(--blue)">acme.example/privacy-notice</b></div>
+  </div>
+  <div class="chip" id="po-clock" style="left:1560px; top:262px;">⏱ 10 seconds</div>
+</section>
+
+<!-- 14. YOUR CHECKLIST -->
+<section class="scene" id="policy">
+  <div class="step">YOUR AIRLINE, YOUR CHECKLIST</div>
+  <div class="ttl">The checklist is yours.</div>
+  <div class="window" id="pl-1" style="left:120px; top:300px; width:520px; height:400px; padding:34px 36px; font-size:24px; line-height:1.45;">
+    <span class="loz blue">Starter pack</span><div style="font-size:40px; font-weight:650; margin-top:14px;">POPIA</div><div style="color:var(--muted)">South Africa · 7 review rules</div>
+    <div style="position:absolute; left:36px; bottom:34px; display:flex; align-items:center; gap:14px;"><span class="toggle" id="pl-t1"><i></i></span><span id="pl-t1-l">Off</span></div>
+  </div>
+  <div class="window" id="pl-2" style="left:700px; top:300px; width:520px; height:400px; padding:34px 36px; font-size:24px; line-height:1.45;">
+    <span class="loz blue">Starter pack</span><div style="font-size:40px; font-weight:650; margin-top:14px;">GDPR</div><div style="color:var(--muted)">EU and EEA · 7 review rules</div>
+    <div style="position:absolute; left:36px; bottom:34px; display:flex; align-items:center; gap:14px;"><span class="toggle"><i></i></span>Off</div>
+  </div>
+  <div class="window" id="pl-3" style="left:1280px; top:300px; width:520px; height:400px; padding:34px 36px; font-size:24px; line-height:1.45;">
+    <span class="loz purple">Drafted by Rovo</span><div style="font-size:40px; font-weight:650; margin-top:14px;">Your own policy</div><div style="color:var(--muted)">Rules drafted from your privacy policy page</div>
+    <div style="position:absolute; left:36px; bottom:34px; display:flex; align-items:center; gap:14px;"><span class="toggle"><i></i></span>Draft · not enforced</div>
+  </div>
+  <div class="legendwrap" style="top:760px;"><div class="legend" id="pl-leg">Nothing is enforced until an approver switches it on.</div></div>
+</section>
+
+<section class="scene center" id="end">
+  <div class="big grad" id="end-word" style="font-size:140px;">Preflight</div>
+  <div class="sub" style="margin-top:22px; font-size:36px;">Privacy review, before you build.</div>
+  <div class="endchips"><span>Scanner</span><span>Gate</span><span>Co-pilot</span><span>Control tower</span><span>Flight recorder</span></div>
+  <div class="sub" style="margin-top:40px; font-size:24px;">Built on Atlassian Forge · Jira · Rovo &nbsp;·&nbsp; Codegeist 2026</div>
+  <div class="sub" style="margin-top:14px; font-size:18px;">Preflight records your organisation’s review. It is not legal advice.</div>
+</section>
+
+
+
+
+<section class="scene dark" id="stage">
+  <div id="rv-glow"></div><div id="rv-sweep"></div>
+  <div id="hk-line"></div>
+  <div id="hk-ticket"><small>PRIV-1 · JIRA TICKET</small>Add SA ID number field to customer signup</div>
+  <div id="hk-bar"></div>
+</section>
+<div id="grade"></div>
+<div id="screen"><div id="cam"><img id="shot" alt=""><div id="ringx"></div></div></div>
+<div id="live"><i></i>LIVE IN JIRA · REAL RECORDING</div>
+<div id="chip"></div>
+<div id="H1"></div><div id="H2"></div>
+<div id="cards3"><span></span><span></span><span></span></div>
+<div id="illus">Illustration</div>
+<div id="rv-word">Preflight</div>
+<div id="rv-tag">Privacy review, before you build.</div>
+<div id="cl-foot">Built on Atlassian Forge · Jira · Rovo · Codegeist 2026<br>Preflight records your organisation’s review. It is not legal advice.</div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const clamp = (x, a = 0, b = 1) => Math.max(a, Math.min(b, x));
+const seg = (t, a, b) => clamp((t - a) / (b - a));
+const ease = (x) => (x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2);
+const out = (x) => 1 - Math.pow(1 - x, 3);
+const lerp = (a, b, x) => a + (b - a) * x;
+const lerpR = (a, b, p) => a.map((v, i) => lerp(v, b[i], p));
+const back = (x) => 1 + 2.70158 * Math.pow(x - 1, 3) + 1.70158 * Math.pow(x - 1, 2);
+const show = (el, o, dy = 0, s = 1) => { el.style.opacity = o; el.style.transform = `translateY(${dy}px) scale(${s})`; };
+const rise = (el, t, a, d = 0.7, dist = 30) => { const p = out(seg(t, a, a + d)); show(el, p, (1 - p) * dist); };
+const pop = (el, t, a, d = 0.6) => { const x = seg(t, a, a + d); const p = out(x); show(el, Math.min(1, x * 3), (1 - p) * 28, lerp(0.84, 1, back(x))); };
+const ent = (t, a, d = 0.5) => out(seg(t, a, a + d));
+const T = (id, s) => $(id).setAttribute('transform', s);
+const O = (id, o) => { $(id).style.opacity = o; };
+const tick = (el, on) => { el.className = on ? 'cb on' : 'cb'; el.textContent = on ? '✓' : ''; };
+const at = (el, x, y) => { el.style.left = `${x}px`; el.style.top = `${y}px`; };
+function typed(el, text, t, a, b) {
+  const n = Math.round(text.length * seg(t, a, b));
+  el.innerHTML = text.slice(0, n) + (t > a && t < b + 0.5 ? '<span class="caret"></span>' : '');
+}
+// The first film's labels are not used here: one headline at a time is set by the scene.
+document.querySelectorAll('.legendwrap, .step, .ttl, .endchips, #tower .name').forEach((e) => e.remove());
+
+const GROUND = 780;
+const OVERLAYS = ['grade', 'screen', 'live', 'chip', 'H1', 'H2', 'cards3', 'illus', 'rv-word', 'rv-tag', 'cl-foot', 'rv-glow', 'rv-sweep', 'hk-line', 'hk-ticket', 'hk-bar', 'ringx'];
+let pending = null;
+function reset() {
+  document.querySelectorAll('.scene').forEach((s) => { s.style.opacity = 0; s.style.transform = ''; s.style.filter = ''; });
+  OVERLAYS.forEach((id) => { $(id).style.opacity = 0; });
+  $('grade').style.background = 'none';
+}
+const sec = (id) => { $(id).style.opacity = 1; return $(id); };
+const grade = (css) => { $('grade').style.background = css; $('grade').style.opacity = 1; };
+const DUSK = 'linear-gradient(180deg, rgba(52,40,118,.46) 0%, rgba(255,138,88,.30) 60%, rgba(36,28,70,.40) 100%)';
+const SHADE = '0 4px 34px rgba(20,10,60,.6)';
+function head(el, text, p, o = {}) {
+  el.textContent = text;
+  Object.assign(el.style, { opacity: p, left: `${o.x ?? 120}px`, top: `${o.y ?? 128}px`, fontSize: `${o.size ?? 82}px`, color: o.color ?? '#0b1220',
+    width: o.w ? `${o.w}px` : 'auto', textAlign: o.align ?? 'left', whiteSpace: o.w ? 'normal' : 'nowrap', fontWeight: o.weight ?? 700,
+    textShadow: o.shadow ?? 'none', transform: `translateY(${(1 - p) * 18}px)` });
+}
+function chip(text, dark = false) {
+  const c = $('chip'); c.textContent = text; c.style.opacity = 1;
+  c.style.background = dark ? 'rgba(120,170,255,.16)' : 'rgba(0,113,227,.10)'; c.style.color = dark ? '#9cc4ff' : '#0062c4';
+}
+function live(x = 210, y = 66, p = 1) { const l = $('live'); l.style.opacity = p; l.style.left = `${x}px`; l.style.top = `${y}px`; }
+function illus(dark = false) { const e = $('illus'); e.style.opacity = 1; e.style.color = dark ? 'rgba(200,210,235,.6)' : 'rgba(68,84,111,.75)'; }
+
+// Real recordings: frames cut from the original capture, shown through a moving camera. Nothing in them is redrawn.
+const CLIPS = { blocked: [1918, 872, 173], rovo: [880, 836, 420], inbox: [1918, 872, 90], approve: [880, 836, 188] };
+function shot(name, ct, view, box, ring, rp = 1, p = 1, dim = 0.5) {
+  const [w, h, n] = CLIPS[name]; const f = Math.max(1, Math.min(n, Math.round(ct * 15) + 1));
+  const k = box.w / view[2];
+  Object.assign($('screen').style, { opacity: p, left: `${box.x}px`, top: `${box.y}px`, width: `${box.w}px`, height: `${box.w * view[3] / view[2]}px` });
+  const cam = $('cam'); cam.style.width = `${w}px`; cam.style.height = `${h}px`; cam.style.transform = `translate(${-view[0] * k}px, ${-view[1] * k}px) scale(${k})`;
+  const img = $('shot'); const src = `footage/${name}/${String(f).padStart(4, '0')}.jpg`;
+  if (img.getAttribute('data-src') !== src) { img.setAttribute('data-src', src); img.src = src; pending = img.decode().catch(() => {}); }
+  if (ring) Object.assign($('ringx').style, { boxShadow: `0 0 0 4000px rgba(6,9,18,${dim}), 0 0 30px rgba(58,151,255,.75)`, opacity: rp, left: `${ring[0]}px`, top: `${ring[1]}px`, width: `${ring[2]}px`, height: `${ring[3]}px`, borderWidth: `${5 / k}px` });
+}
+const WIDE = { x: 210, y: 240, w: 1500 }, TALL = { x: 800, y: 170, w: 1000 };
+const MSG = [10, 554, 700, 318], TOAST = [36, 618, 520, 188];
+
+const draw = {
+  hook(lt, d, L) {
+    sec('stage');
+    if (lt < L[0]) {
+      const mv = ease(seg(lt, 0.5, 1.95)), drop = out(seg(lt, 1.95, 2.15));
+      const bump = lt > 1.95 ? 14 * Math.sin((lt - 1.95) * 30) * Math.exp(-(lt - 1.95) * 6) : 0;
+      $('hk-line').style.opacity = seg(lt, 0.2, 0.9);
+      $('hk-ticket').style.opacity = seg(lt, 0.3, 0.8); $('hk-ticket').style.transform = `translateX(${lerp(260, 640, mv) - bump}px)`;
+      $('hk-bar').style.opacity = 1; $('hk-bar').style.transform = `translateY(${lerp(-800, 0, drop)}px)`;
+      $('hk-bar').style.boxShadow = `0 0 ${100 * drop}px ${16 * drop}px rgba(229,56,59,${0.6 * drop})`;
+    } else {
+      const q = lt - L[0]; live(210, 66, ent(lt, L[0], 0.3));
+      shot('blocked', Math.min(7.7 + q * 0.55, 11.4), lerpR([0, 372, 1100, 500], MSG, ease(seg(q, 0.5, 2.6))), WIDE, TOAST, seg(q, 2.6, 3.1));
+      head($('H1'), lt < L[2] ? 'Jira just refused to start a ticket.' : 'It’s a pre-flight check.', lt < L[2] ? ent(lt, L[0] + 0.1) : ent(lt, L[2]), { x: 210, y: 122, size: 66, color: '#fff' });
+    }
+  },
+  problem(lt, d, L) {
+    grade(DUSK);
+    if (lt < L[1]) {
+      const s = sec('gate'); s.style.transform = `scale(1.05) translateX(${lerp(14, -14, lt / L[1])}px)`;
+      T('g-plane', 'translate(0,0)');
+      const w = seg(lt, 0.2, L[1] - 0.2); T('g-crew', `translate(${lerp(430, 1330, w)},${Math.abs(Math.sin(w * 40)) * -5})`);
+      pop($('g-list'), lt, 0.5); tick($('g-c1'), lt > L[0] + 1.3); tick($('g-c2'), lt > L[0] + 2.0); tick($('g-c3'), lt > L[0] + 2.7);
+      head($('H1'), 'A check before take-off.', ent(lt, 0.3), { color: '#fff', shadow: SHADE });
+    } else {
+      sec('nocheck');
+      const fly = (id, p) => { const x = lerp(-420, 2350, p), up = ease(clamp((p - 0.28) / 0.72)); const y = 702 - 560 * up;
+        T(id, `translate(${x},${y}) rotate(${-13 * seg(p, 0.28, 0.5)} 190 73)`); return [x, y]; };
+      fly('n-p1', seg(lt, L[1] - 0.1, L[1] + 2.2)); fly('n-p2', seg(lt, L[2] - 0.2, L[2] + 2.1));
+      const p3 = lt < L[3] + 0.9 ? 0.6 * out(seg(lt, L[2] + 0.9, L[3] + 0.9)) : 0.6 + 0.04 * seg(lt, L[3] + 0.9, d);
+      const [x, y] = fly('n-p3', p3);
+      pop($('n-tue'), lt, L[2]); pop($('n-thu'), lt, L[2] + 1.2);
+      const r = seg(lt, L[3] + 0.9, L[3] + 1.3);
+      O('n-ring', r * (0.7 + 0.3 * Math.sin(lt * 8))); at($('n-tag'), x - 150, y + 262); $('n-tag').style.opacity = r; $('n-tag').style.transform = '';
+      head($('H1'), lt < L[3] ? 'Software doesn’t.' : 'Nobody checks what’s on board.', lt < L[3] ? ent(lt, L[1]) : ent(lt, L[3]), { color: '#fff', shadow: SHADE });
+    }
+  },
+  stakes(lt, d, L) {
+    if (lt < L[4] - 0.3) {
+      sec('storm');
+      const f1 = Math.max(0, 1 - Math.abs(lt - 0.6) / 0.18), f2 = Math.max(0, 1 - Math.abs(lt - (L[1] + 0.1)) / 0.18);
+      O('st-flash', 0.5 * Math.max(f1, f2)); O('st-bolt', Math.max(f1, f2));
+      $('st-rain').style.transform = `translate(${-(lt * 160) % 46}px, ${(lt * 420) % 172}px)`;
+      $('st-eye').textContent = 'MONTHS LATER'; rise($('st-eye'), lt, 0.2, 0.8, 10);
+      T('st-plane', `translate(${1000 + Math.sin(lt * 5.1) * 26},${330 + Math.sin(lt * 7.3) * 22}) rotate(${Math.sin(lt * 3.7) * 5})`);
+      const c0 = L[1] + 0.2, fall = seg(lt, c0, c0 + 2.6);
+      T('st-case', `translate(${1000 - 60 * fall},${390 + 520 * fall * fall}) rotate(${fall * 150})`); O('st-case', seg(lt, c0 - 0.1, c0 + 0.1) * (1 - seg(lt, c0 + 2.3, c0 + 2.7)));
+      [['st-id1', -330, 300, -30], ['st-id2', -120, 380, 18], ['st-id3', 140, 330, -12], ['st-id4', 350, 260, 26]].forEach(([id, dx, dy, r], i) => {
+        const a = c0 + 0.5 + i * 0.25, p = out(seg(lt, a, a + 2.3));
+        T(id, `translate(${990 + dx * p},${420 + dy * p + 18 * Math.sin(lt * 2 + i)}) rotate(${r * p})`); O(id, seg(lt, a, a + 0.3) * (1 - seg(lt, L[3] - 0.5, L[3] - 0.1)));
+      });
+      const lp = out(seg(lt, L[0] + 0.5, L[0] + 1.3)), le = $('st-letter');
+      le.style.opacity = lp * (1 - seg(lt, L[2] + 0.4, L[2] + 0.9)); le.style.transform = `translateY(${(1 - lp) * -120}px) rotate(${lerp(-10, -3, lp)}deg)`;
+      const p = out(seg(lt, L[3] - 0.1, L[3] + 0.6)); show($('st-big'), p, 0, lerp(1.12, 1, p)); $('st-sub').style.opacity = 0;
+    } else {
+      sec('stakes'); $('s-eye').style.opacity = 0;
+      head($('H1'), 'Regulators are already fining.', lt < L[5] - 0.15 ? ent(lt, L[4] - 0.25, 0.4) : 0, { x: 0, w: 1920, y: 470, size: 84, color: '#fff', align: 'center' });
+      [['s1', L[5], L[6]], ['s2', L[6], L[7]], ['s3', L[7], d + 1]].forEach(([id, a, b]) => {
+        const el = $(id); el.style.left = '410px';
+        const p = out(seg(lt, a - 0.05, a + 0.45)) * (lt < b - 0.12 ? 1 : 0);
+        el.style.opacity = p; el.style.transform = `scale(${lerp(0.94, 1, p) + 0.04 * seg(lt, a, b)})`;
+      });
+      $('s-src').style.opacity = ent(lt, L[5], 0.6); $('s-src').style.transform = '';
+    }
+  },
+  reveal(lt, d, L) {
+    sec('stage');
+    $('rv-glow').style.opacity = out(seg(lt, L[0] - 0.25, L[0] + 1.8));
+    const sw = seg(lt, L[0] - 0.2, L[0] + 1.5); $('rv-sweep').style.opacity = Math.sin(Math.PI * sw); $('rv-sweep').style.transform = `translateX(${lerp(-600, 2000, sw)}px)`;
+    const p = out(seg(lt, L[0] - 0.1, L[0] + 0.9)); const w = $('rv-word'); w.style.opacity = p; w.style.transform = `scale(${lerp(0.9, 1, p) + 0.02 * seg(lt, L[0], d)})`;
+    $('rv-tag').style.opacity = ent(lt, L[1], 0.6);
+  },
+  scan(lt, d, L, D) {
+    sec('scan'); chip('STEP 1 · THE SCANNER'); illus(); head($('H1'), 'It reads every ticket.', ent(lt, L[1]));
+    const a = L[1], b = L[2];
+    const x = lt < b + 1.2 ? lerp(-420, 790, ease(seg(lt, 0.3, a + 1.6))) : lerp(790, 1340, ease(seg(lt, b + 1.2, L[3] + 0.3)));
+    T('sc-bag', `translate(${x},720)`); O('sc-tag', seg(lt, L[3] - 0.1, L[3] + 0.2));
+    $('sc-lamp').setAttribute('fill', lt > b ? '#e5383b' : (lt > a + 1.6 && Math.sin(lt * 14) > 0 ? '#f4c542' : '#31c46c'));
+    pop($('sc-screen'), lt, a + 1.4);
+    const hl = $('sc-hl'); hl.style.background = lt > b ? '#e5383b' : 'transparent'; hl.style.color = lt > b ? '#fff' : ''; hl.style.padding = '0 6px'; hl.style.borderRadius = '6px';
+    $('sc-verdict').style.opacity = seg(lt, b + 0.7, b + 1.1);
+    const third = D[3] / 3; pop($('sc-k1'), lt, L[3]); pop($('sc-k2'), lt, L[3] + third); pop($('sc-k3'), lt, L[3] + 2 * third);
+  },
+  gate(lt, d, L, D) {
+    if (lt < L[2] - 0.15) {
+      sec('blocked'); chip('STEP 2 · THE GATE'); illus(); head($('H1'), 'The gate stays closed.', ent(lt, L[1]));
+      const tb = L[1] + 1.3, arrive = out(seg(lt, 0.2, tb)), bump = lt > tb ? 10 * Math.sin((lt - tb) * 26) * Math.exp(-(lt - tb) * 5) : 0;
+      const x = lerp(-800, 215, arrive) - bump, y = GROUND - 0.845 * 292;
+      T('b-plane', `translate(${x},${y})`); T('b-arm', '');
+      $('b-lamp').setAttribute('fill', lt > tb - 0.1 && Math.sin(lt * 10) > -0.3 ? '#e5383b' : '#a52224');
+      const tk = $('b-tick'); tk.textContent = 'PRIV-1 · Add SA ID number field'; at(tk, x + 150, y - 70); tk.style.opacity = seg(lt, 1.0, 1.5); tk.style.transform = '';
+      $('b-list').style.opacity = 0;
+    } else {
+      sec('stage'); live(210, 66, ent(lt, L[2] - 0.15, 0.3));
+      const a = L[2], r = L[4];
+      const ct = lt < r ? lerp(0.3, 7.0, seg(lt, a, r)) : Math.min(7.0 + (lt - r) * 1.6, 8.0) + Math.max(0, lt - r - 0.65) * 0.35;
+      shot('blocked', Math.min(ct, 11.4), lerpR([0, 0, 1918, 872], MSG, ease(seg(lt, r + 0.9, L[5] + 0.6))), WIDE, TOAST, seg(lt, L[5] + 0.5, L[5] + 0.9), ent(lt, a - 0.15, 0.3));
+      if (lt < L[6] - 0.1) head($('H1'), lt < L[3] ? 'Here it is in Jira.' : lt < r ? 'Drag to In Progress.' : 'Refused.', 1, { x: 210, y: 122, size: 66, color: lt >= r ? '#ff8083' : '#fff' });
+      else {
+        $('cards3').style.opacity = 1; const third = D[6] / 3;
+        ['Why you need it', 'Your lawful basis', 'When it’s deleted'].forEach((t, i) => { const s = $('cards3').children[i]; s.textContent = t; s.style.opacity = ent(lt, L[6] + i * third, 0.35); });
+      }
+    }
+  },
+  copilot(lt, d, L) {
+    sec('stage');
+    if (lt < L[1] - 0.15) { chip('STEP 3 · THE CO-PILOT', true); head($('H1'), 'Your co-pilot.', ent(lt, 0.4), { x: 0, w: 1920, y: 440, size: 130, color: '#fff', align: 'center' }); return; }
+    if (lt < L[6] - 0.5) {
+      chip('STEP 3 · THE CO-PILOT', true); live(800, 104);
+      const beats = [['Ask.', 'The Preflight agent, in Rovo', 0.2, 2.4, [124, 362, 632, 474]], ['It checks.', 'The ticket and its open questions', 2.6, 4.9, [124, 150, 632, 474]],
+        ['It drafts.', 'A draft answer, from the ticket', 7.0, 10.9, [124, 300, 632, 474]], ['It asks first.', 'Nothing is saved without a yes', 14.0, 17.9, [124, 330, 632, 474]],
+        ['A person confirms.', 'Only “Use draft” makes it count', 21.2, 27.9, [0, 110, 880, 660]]];
+      let i = 0; for (let k = 1; k <= 5; k++) if (lt >= L[k] - 0.15) i = k - 1;
+      const [t1, t2, c0, c1, view] = beats[i]; const a = L[i + 1] - 0.15, b = i === 4 ? L[6] - 0.7 : L[i + 2] - 0.15;
+      const ct = lerp(c0, c1, seg(lt, a, b));
+      shot('rovo', ct, view, TALL, i === 4 ? [20, 258, 430, 48] : null, i === 4 && ct < 26.6 ? seg(lt, a + 0.5, a + 0.9) : 0, 1, 0.22);
+      head($('H1'), t1, ent(lt, a, 0.35), { x: 120, y: i === 4 ? 392 : 380, size: i === 4 ? 70 : 92, color: '#fff' });
+      head($('H2'), t2, ent(lt, a + 0.15, 0.4), { x: 120, y: 500, size: 34, color: '#9fb4d8', weight: 500 });
+      return;
+    }
+    head($('H1'), 'AI can help.', ent(lt, L[6] - 0.1, 0.5), { x: 0, w: 1920, y: 380, size: 140, color: '#fff', align: 'center' });
+    head($('H2'), 'It can’t approve.', ent(lt, L[7] - 0.05, 0.5), { x: 0, w: 1920, y: 560, size: 140, color: '#7fb8ff', align: 'center', weight: 700 });
+  },
+  tower(lt, d, L) {
+    if (lt < L[1] - 0.15) {
+      sec('tower'); chip('STEP 4 · THE CONTROL TOWER'); illus(); head($('H1'), 'The control tower.', ent(lt, 0.4), { x: 760 });
+      ['tw-board', 'tw-stamp', 'tw-ring'].forEach((id) => { $(id).style.opacity = 0; }); O('tw-beam', 0); $('tw-lamp').setAttribute('fill', '#e5383b');
+      return;
+    }
+    if (lt < L[2] - 0.15) {
+      sec('stage'); live(210, 66); const a = L[1] - 0.15;
+      shot('inbox', Math.min((lt - a) * 0.35, 1.7), lerpR([0, 0, 1918, 872], [0, 392, 1056, 480], ease(seg(lt, a + 1.0, a + 2.8))), WIDE, null, 0, ent(lt, a, 0.3));
+      head($('H1'), 'One inbox.', ent(lt, a, 0.35), { x: 210, y: 122, size: 66, color: '#fff' });
+      return;
+    }
+    if (lt < L[5] - 0.2) {
+      sec('stage'); chip('STEP 4 · THE CONTROL TOWER', true); live(800, 104); const a = L[2] - 0.15;
+      const ct = lt < L[3] ? lerp(0, 5.6, seg(lt, a, L[3])) : lt < L[4] ? lerp(5.6, 9.3, seg(lt, L[3], L[4])) : Math.min(9.3 + (lt - L[4]) * 0.5, 12.2);
+      const push = ease(seg(lt, L[4] + 0.2, L[4] + 1.4));
+      shot('approve', ct, lerpR([0, 90, 880, 660], [0, 330, 640, 480], push), TALL, [8, 452, 620, 48], seg(lt, L[4] + 1.3, L[4] + 1.7), 1, 0.3);
+      const t = lt < L[3] ? ['Approve unlocks.', 'Once the answers are saved'] : lt < L[4] ? ['One click.', 'By a named approver'] : ['Signed off.', 'Name, date and time, on the record'];
+      const ta = lt < L[3] ? a : lt < L[4] ? L[3] : L[4];
+      head($('H1'), t[0], ent(lt, ta, 0.35), { x: 120, y: 388, size: 76, color: lt >= L[4] ? '#63e6a2' : '#fff' });
+      head($('H2'), t[1], ent(lt, ta + 0.15, 0.4), { x: 120, y: 500, size: 34, color: '#9fb4d8', weight: 500 });
+      return;
+    }
+    sec('blocked'); illus(); const a = L[5] - 0.2;
+    head($('H1'), 'Cleared to build.', ent(lt, a + 0.1), { color: '#0b1220' });
+    T('b-arm', `rotate(${-78 * ease(seg(lt, a, a + 0.9))} 1013 662)`); $('b-lamp').setAttribute('fill', '#31c46c');
+    const p = Math.pow(seg(lt, a + 0.7, a + 3.9), 1.6), lift = Math.pow(clamp((p - 0.25) / 0.75), 1.6);
+    const x = 215 + 2400 * p, y = GROUND - 0.845 * 292 - 520 * lift;
+    T('b-plane', `translate(${x},${y}) rotate(${-14 * seg(p, 0.25, 0.5)} 380 146)`);
+    $('b-tick').style.opacity = 0; $('b-list').style.opacity = 0;
+  },
+  sneak(lt, d, L) {
+    sec('dodge'); chip('NO SNEAKING PAST'); illus();
+    const act2 = lt >= L[3] - 0.2, l = $('d-left'), r = $('d-right');
+    l.style.opacity = act2 ? 0 : ent(lt, 0.2); l.style.transform = 'translate(440px, 36px) scale(1.12)';
+    r.style.opacity = act2 ? ent(lt, L[3] - 0.2) : 0; r.style.transform = 'translate(-440px, 36px) scale(1.12)';
+    const sw = seg(lt, L[1] + 0.5, L[1] + 1.0); O('d-tag1', 1 - sw); T('d-tag1', `translate(${sw * 60},${sw * -40}) rotate(${sw * 14} 485 130)`); O('d-tag2', seg(lt, L[1] + 0.9, L[1] + 1.3));
+    $('d-flag').style.opacity = seg(lt, L[2], L[2] + 0.25);
+    const a = '5 years after account closure', b = 'forever', t0 = L[3] + 0.7;
+    $('d-ans').innerHTML = (lt < t0 ? a : lt < t0 + 0.5 ? a.slice(0, Math.round(a.length * (1 - seg(lt, t0, t0 + 0.5)))) : b.slice(0, Math.round(b.length * seg(lt, t0 + 0.5, t0 + 1.1)))) + (act2 && lt < L[4] ? '<span class="caret"></span>' : '');
+    const off = lt > L[4], st = $('d-stamp');
+    st.textContent = off ? 'OUT OF DATE' : 'CLEARED'; st.style.borderColor = off ? '#e5383b' : 'var(--green)'; st.style.color = off ? '#e5383b' : 'var(--green)';
+    st.style.transform = `rotate(-6deg) scale(${off ? 1 + 0.14 * Math.sin(Math.PI * seg(lt, L[4], L[4] + 0.4)) : 1})`;
+    $('d-note').style.opacity = seg(lt, L[5], L[5] + 0.3);
+    if (!act2) head($('H1'), lt < L[2] ? 'Reword the ticket.' : 'Still flagged.', lt < L[2] ? ent(lt, Math.min(L[1], 0.6)) : ent(lt, L[2], 0.3), { color: lt < L[2] ? '#0b1220' : '#c62828' });
+    else head($('H1'), lt < L[4] ? 'Change an answer.' : 'Clearance cancelled.', lt < L[4] ? ent(lt, L[3] - 0.2) : ent(lt, L[4], 0.3), { color: lt < L[4] ? '#0b1220' : '#c62828' });
+  },
+  landing(lt, d, L) {
+    sec('landing'); chip('STEP 5 · THE LANDING CHECK'); illus(); head($('H1'), 'Proof before Done.', ent(lt, L[1]));
+    const tOk = L[2] + 2.1, inP = out(seg(lt, 0.2, L[1] + 0.6)), land = ease(seg(lt, tOk + 0.1, d - 0.3));
+    const hx = lerp(-600, 300, inP), hy = lerp(120, 400, inP) + (land ? 0 : Math.sin(lt * 2.2) * 10), gy = 826 - 0.845 * 215;
+    T('l-plane', `translate(${lerp(hx, 900, land)},${lerp(hy, gy, land)}) rotate(${lerp(7, 0, land) * inP} 280 107)`);
+    pop($('l-card'), lt, L[1] + 0.2); typed($('l-url'), 'acme.example/privacy-notice', lt, L[2] + 0.2, L[2] + 1.8);
+    const ok = lt > tOk; $('l-ok').style.opacity = ok ? 1 : 0; $('l-lamp').setAttribute('fill', ok ? '#31c46c' : '#e5383b');
+  },
+  recorder(lt, d, L) {
+    if (lt < L[2] - 0.2) {
+      sec('payoff'); illus(); ['po-q', 'po-rec', 'po-clock'].forEach((id) => { $(id).style.opacity = 0; });
+      [['po-c1', 760, 330], ['po-c2', 1040, 410], ['po-c3', 800, 510], ['po-c4', 1080, 610], ['po-c5', 820, 710]].forEach(([id, sx, sy], i) => {
+        const a = 0.4 + i * 0.55, p = ease(seg(lt, a + 0.45, a + 1.3)), el = $(id);
+        at(el, lerp(sx, 300, p), lerp(sy, 550, p)); el.style.opacity = out(seg(lt, a, a + 0.3)) * (1 - seg(lt, a + 1.1, a + 1.35)); el.style.transform = `scale(${lerp(1, 0.6, p)})`;
+      });
+      O('po-wo', seg(lt, L[1], L[1] + 0.3));
+      head($('H1'), lt < L[1] ? 'Every answer is kept.' : 'Write-once.', lt < L[1] ? ent(lt, 0.3) : ent(lt, L[1], 0.3));
+      return;
+    }
+    sec('stage');
+    if (lt < L[4] - 0.2) {
+      head($('H2'), 'Ask again.', ent(lt, L[2], 0.4) * (1 - seg(lt, L[3] - 0.2, L[3])), { x: 0, w: 1920, y: 500, size: 44, color: '#9fb4d8', align: 'center', weight: 500 });
+      head($('H1'), 'Who approved this?', ent(lt, L[3] - 0.05, 0.5), { x: 0, w: 1920, y: 440, size: 150, color: '#fff', align: 'center' });
+      return;
+    }
+    const a = L[4] - 0.2; live(360, 70, ent(lt, a, 0.3));
+    shot('approve', 10.5 + (lt - a) * 0.3, [0, 360, 640, 400], { x: 360, y: 250, w: 1200 }, [8, 452, 620, 48], seg(lt, a + 0.5, a + 0.9), ent(lt, a, 0.3), 0.3);
+    head($('H1'), 'It’s on the record.', ent(lt, a + 0.1), { x: 360, y: 126, size: 74, color: '#63e6a2' });
+  },
+  checklist(lt, d, L) {
+    sec('policy'); illus(); head($('H1'), 'The checklist is yours.', ent(lt, 0.3));
+    pop($('pl-1'), lt, L[1]); pop($('pl-2'), lt, L[1] + 0.9); pop($('pl-3'), lt, L[2]);
+    head($('H2'), 'Nothing is enforced until an approver switches it on.', ent(lt, L[3]), { x: 120, y: 770, size: 42, color: '#26344d', weight: 600 });
+    const on = lt > L[3] + 2.4; $('pl-t1').className = on ? 'toggle on' : 'toggle';
+    $('pl-t1-l').innerHTML = on ? '<b style="color:var(--green)">On</b> · switched on by an approver' : 'Off';
+  },
+  close(lt, d, L) {
+    sec('blocked').style.filter = 'blur(7px)'; T('b-arm', 'rotate(-78 1013 662)'); $('b-lamp').setAttribute('fill', '#31c46c');
+    T('b-plane', `translate(${215 + lt * 16},${GROUND - 0.845 * 292})`); $('b-tick').style.opacity = 0; $('b-list').style.opacity = 0;
+    grade('linear-gradient(180deg, rgba(6,9,18,.84), rgba(6,9,18,.95))');
+    const p = out(seg(lt, L[0] - 0.3, L[0] + 0.8)); const w = $('rv-word'); w.style.opacity = p; w.style.transform = `scale(${lerp(0.92, 1, p)})`;
+    $('rv-tag').style.opacity = ent(lt, L[1], 0.6); $('cl-foot').style.opacity = ent(lt, 1.6, 0.8);
+  },
+};
+
+// Sound cues, on the film's clock, tied to the spoken lines.
+window.getCues = () => {
+  const by = {}; window.TIMELINE.forEach((s) => { by[s.id] = s; });
+  const A = (id, i, off = 0) => by[id].start + (i == null ? 0 : by[id].lines[i].t) + off;
+  const Dn = (id, i) => by[id].lines[i].d;
+  const c = [
+    ['whoosh', A('hook', null, 0.5)], ['hit', A('hook', null, 1.95)], ['deny', A('hook', null, 2.12)],
+    ['tick', A('problem', 0, 1.3)], ['tick', A('problem', 0, 2.0)], ['tick', A('problem', 0, 2.7)], ['whoosh', A('problem', 1, -0.1)], ['whoosh', A('problem', 2, -0.2)], ['pop', A('problem', 2, 1.2)], ['hit', A('problem', 3, 0.9)],
+    ['hit', A('stakes', null, 0.6)], ['drop', A('stakes', 0, 0.9)], ['hit', A('stakes', 1, 0.1)], ['hit', A('stakes', 3, -0.1)], ['hit', A('stakes', 5)], ['hit', A('stakes', 6)], ['hit', A('stakes', 7)],
+    ['swell', A('reveal', 0, -0.4)], ['chime', A('reveal', 0)],
+    ['whoosh', A('scan', null, 0.4)], ['tick', A('scan', 1, 1.7)], ['deny', A('scan', 2)], ['pop', A('scan', 3)], ['pop', A('scan', 3, Dn('scan', 3) / 3)], ['pop', A('scan', 3, 2 * Dn('scan', 3) / 3)],
+    ['whoosh', A('gate', null, 0.3)], ['drop', A('gate', 1, 1.3)], ['click', A('gate', 1, 1.36)], ['whoosh', A('gate', 3, 0.2)], ['deny', A('gate', 4, 0.25)],
+    ['tick', A('gate', 6)], ['tick', A('gate', 6, Dn('gate', 6) / 3)], ['tick', A('gate', 6, 2 * Dn('gate', 6) / 3)],
+    ['pop', A('copilot', 1)], ['tick', A('copilot', 2)], ['pop', A('copilot', 3)], ['msg', A('copilot', 4)], ['click', A('copilot', 6, -1.3)], ['success', A('copilot', 6, -1.2)],
+    ['pop', A('tower', 1)], ['click', A('tower', 2, 0.5)], ['click', A('tower', 3, 0.5)], ['hit', A('tower', 4, 1.3)], ['success', A('tower', 4, 1.4)], ['chime', A('tower', 5, -0.1)], ['whoosh', A('tower', 5, 0.8)],
+    ['whoosh', A('sneak', 1, 0.5)], ['deny', A('sneak', 2)], ['type', A('sneak', 3, 0.7), 1.0], ['hit', A('sneak', 4)], ['deny', A('sneak', 4, 0.05)],
+    ['pop', A('landing', 1, 0.2)], ['type', A('landing', 2, 0.2), 1.6], ['chime', A('landing', 2, 2.1)], ['success', A('landing', 2, 2.9)],
+    ['pop', A('recorder', null, 0.4)], ['pop', A('recorder', null, 0.95)], ['pop', A('recorder', null, 1.5)], ['pop', A('recorder', null, 2.05)], ['pop', A('recorder', null, 2.6)], ['hit', A('recorder', 3, -0.05)], ['success', A('recorder', 4, 0.3)],
+    ['pop', A('checklist', 1)], ['pop', A('checklist', 1, 0.9)], ['pop', A('checklist', 2)], ['click', A('checklist', 3, 2.4)], ['chime', A('checklist', 3, 2.5)],
+    ['chime', A('close', 0, -0.1)],
+  ];
+  return c;
+};
+
+window.TIMELINE = window.TIMELINE || [];
+window.render = function render(t) {
+  pending = null; reset();
+  const tl = window.TIMELINE;
+  const s = tl.find((x) => t >= x.start && t < x.start + x.dur) || tl[tl.length - 1];
+  if (!s) return null;
+  document.body.style.background = '#060912';
+  draw[s.id](t - s.start, s.dur, s.lines.map((l) => l.t), s.lines.map((l) => l.d));
+  return pending;
+};
+</script>
+</body>
+</html>

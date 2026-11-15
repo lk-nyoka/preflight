@@ -1,0 +1,15 @@
+[
+ {"id":"hook","dur":9.2,"dark":true,"lines":[[3.0,"Jira just refused to start this ticket."],[6.0,"That's not a bug."],[7.4,"It's a pre-flight check."]]},
+ {"id":"problem","dur":9.6,"lines":[[0.3,"Every flight gets a check before it leaves the gate."],[4.0,"Software doesn't."],[5.5,"Written Tuesday. Shipped Thursday."],[7.7,"Nobody checks what's on board."]]},
+ {"id":"stakes","dur":17.6,"dark":true,"lines":[[0.4,"Months later, a complaint lands."],[3.0,"Customer ID numbers. No reason. No end date."],[6.6,"And one question."],[8.2,"Who approved this?"],[10.6,"Regulators are already fining."],[12.6,"One million rand."],[14.1,"Half a million."],[15.5,"Up to ten years in prison."]]},
+ {"id":"reveal","dur":7.0,"dark":true,"lines":[[1.1,"Preflight."],[2.5,"Privacy review, before you build."]]},
+ {"id":"scan","dur":12.0,"lines":[[0.4,"Step one. The scanner."],[2.5,"It reads every ticket as it's written."],[5.2,"Title and description."],[7.2,"ID numbers. Health details. Children's data."]]},
+ {"id":"gate","dur":16.6,"lines":[[0.4,"Step two. The gate."],[2.3,"Personal data on board? The gate stays closed."],[6.2,"Here it is in Jira."],[7.8,"Drag to In Progress."],[9.9,"Refused."],[11.2,"With exactly what's missing."],[13.0,"Why you need it. Your lawful basis. When it's deleted."]]},
+ {"id":"copilot","dur":22.6,"dark":true,"lines":[[0.4,"Step three. Your co-pilot."],[2.5,"Ask the Preflight agent in Rovo."],[5.1,"It checks the ticket."],[7.2,"It drafts the answer."],[9.6,"Then it asks before saving anything."],[12.8,"The draft counts only when a person clicks Use draft."],[17.4,"AI can help."],[19.1,"It can't approve."]]},
+ {"id":"tower","dur":19.4,"lines":[[0.4,"Step four. The control tower."],[2.7,"Approvers see every waiting ticket in one inbox."],[6.8,"Save the answers, and Approve unlocks."],[10.2,"One click."],[11.6,"Name, date and time, on the record."],[15.4,"Gate open. Cleared to build."]]},
+ {"id":"sneak","dur":14.0,"lines":[[0.4,"Now, try to sneak past."],[2.4,"Reword the ticket."],[4.6,"Still flagged."],[7.0,"Change an answer after sign-off."],[9.9,"Clearance cancelled."],[11.8,"It needs a new sign-off."]]},
+ {"id":"landing","dur":9.6,"lines":[[0.4,"Step five. The landing check."],[2.7,"Before Done, one more proof."],[4.8,"A link to the updated privacy notice."]]},
+ {"id":"recorder","dur":11.2,"lines":[[0.4,"Every answer goes into the flight recorder."],[3.3,"Write-once."],[4.9,"So ask again."],[6.3,"Who approved this?"],[8.6,"It's on the record."]]},
+ {"id":"checklist","dur":11.4,"lines":[[0.4,"The checklist is yours."],[2.3,"Start with POPIA or GDPR."],[4.6,"Or let Rovo draft rules from your own policy."],[7.7,"Nothing is enforced until an approver switches it on."]]},
+ {"id":"close","dur":7.2,"dark":true,"lines":[[0.9,"Preflight."],[2.3,"Privacy review, before you build."]]}
+]

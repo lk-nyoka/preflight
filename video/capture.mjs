@@ -14,12 +14,13 @@ const fps = Number(fpsArg || 30);
 const workers = Number(workersArg || 4);
 const total = timeline.at(-1).start + timeline.at(-1).dur;
 const frames = Math.ceil(total * fps);
+const film = process.env.FILM || path.join(here, 'film.html');   // FILM=<path> renders another film with the same tools
 fs.mkdirSync(outDir, { recursive: true });
 
 const browser = await chromium.launch({ executablePath: '/usr/bin/google-chrome', args: ['--font-render-hinting=none', '--disable-gpu'] });
 async function worker(w) {
   const page = await browser.newPage({ viewport: { width: 1920, height: 1080 }, deviceScaleFactor: 1 });
-  await page.goto(`file://${path.join(here, 'film.html')}`);
+  await page.goto(`file://${film}`);
   await page.evaluate((tl) => { window.TIMELINE = tl; }, timeline);
   await page.evaluate(() => document.fonts.ready);
   for (let i = w; i < frames; i += workers) {
@@ -30,7 +31,7 @@ async function worker(w) {
   await page.close();
 }
 await Promise.all(Array.from({ length: workers }, (_, w) => worker(w)));
-const cues = await (async () => { const p = await browser.newPage(); await p.goto(`file://${path.join(here, 'film.html')}`); const c = await p.evaluate(() => window.CUES); await p.close(); return c; })();
+const cues = await (async () => { const p = await browser.newPage(); await p.goto(`file://${film}`); const c = await p.evaluate((tl) => { window.TIMELINE = tl; return window.getCues ? window.getCues() : window.CUES; }, timeline); await p.close(); return c; })();
 fs.writeFileSync(path.join(path.dirname(tlPath), 'cues.json'), JSON.stringify(cues));
 await browser.close();
 console.log(`done: ${frames} frames`);
