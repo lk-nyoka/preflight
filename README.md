@@ -21,6 +21,22 @@ process**; it does not determine legal compliance and is not legal advice.
 
 Built on Atlassian Forge for Codegeist 2026.
 
+## Known limits
+
+Worth knowing before you judge it on the wrong thing:
+
+- **It is not a vulnerability scanner.** It governs the decision to collect, keep and share personal data, not the
+  implementation that then leaks it. A bug that exposes data a review had properly approved is outside its scope.
+- **It does not read your code or your database**, only the work item's words and the answers people give. A change
+  shipped without a work item is out of reach.
+- **Keyword matching misses wording.** Blind-test recall was 63-70% (see the blind-test table under [Trust model](#trust-model)),
+  which is why there is also a Yes / No / Unsure declaration step rather than relying on the matcher alone.
+- **The starter packs are not a legal assessment**, just a seven-rule starting point for an Information Officer or
+  DPO to adapt.
+- **Company-managed spaces are what has been verified.** Team-managed is declared but untested.
+- **Attaching the gates is manual**, because Forge has no API for it. The coverage check reports where they are
+  missing; it cannot add them.
+
 ---
 
 ## What it does
@@ -182,7 +198,7 @@ forge install --product jira --site <your-site>.atlassian.net
 Then: **Jira settings → Apps → Preflight → Setup → Load demo**, attach both gates, and drag *Add SA ID number field to
 customer signup* to In Progress.
 
-`npm test` runs 84 tests: the engine, the matcher regression corpus (including all three blind-test sets), end-to-end
+`npm test` runs 85 tests: the engine, the matcher regression corpus (including all three blind-test sets), end-to-end
 flows with Jira and storage faked (two-stage gating, stale approvals, sticky matches, drafts that don't count,
 governance of approvers and active rules, write-once audit, locks, exception expiry, rate limiting, fail-closed,
 deletion, coverage), and regression tests for the holes found by the independent audits (`test/exploits.test.js`). They do not replace testing real transitions on a developer site.
